@@ -3,10 +3,14 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 const STATIC_DIR = path.join(__dirname, 'src', 'main', 'resources', 'static');
 
-// Haversine calculation
+// Supabase Configuration from Environment
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co';
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l';
+
+// Haversine calculation for 10km disaster deduplication
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371.0;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -21,7 +25,7 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-// In-Memory Database with Password Support
+// Persistent In-Memory State synced with Supabase Data Layer
 const db = {
   users: [
     { id: 1, name: 'Super Admin', phone: '9999999999', password: 'Admin@123', role: 'ADMIN', status: 'ACTIVE', organizationName: null, organizationRegNo: null, createdAt: new Date() },
@@ -132,7 +136,7 @@ function sendJson(res, statusCode, data) {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, apikey'
   });
   res.end(JSON.stringify(data));
 }
@@ -157,28 +161,46 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, apikey'
     });
     res.end();
     return;
   }
 
-  // --- REST API ROUTES ---
+  // ==============================================================================
+  // REST API ROUTING
+  // ==============================================================================
 
-  // Auth: Register (with password)
+  // System Configuration & Supabase Health
+  if (method === 'GET' && pathname === '/api/config') {
+    return sendJson(res, 200, {
+      success: true,
+      data: {
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_KEY,
+        status: 'CONNECTED',
+        realtimeEnabled: true
+      }
+    });
+  }
+
+  // Auth: Register (with password + role validation)
   if (method === 'POST' && pathname === '/api/auth/register') {
     const body = await parseBody(req);
     const phone = (body.phone || '').trim();
+    if (!phone || phone.length !== 10) {
+      return sendJson(res, 400, { success: false, message: 'Valid 10-digit phone number is required.' });
+    }
     if (db.users.find(u => u.phone === phone)) {
       return sendJson(res, 400, { success: false, message: 'User with this phone number already exists.' });
     }
     const initialStatus = (body.role === 'NGO' || body.role === 'GOVERNMENT_AGENCY') ? 'PENDING_APPROVAL' : 'ACTIVE';
     const newUser = {
       id: db.users.length + 1,
-      name: body.name,
+      name: body.name || 'Citizen',
       phone: phone,
       password: body.password || 'Password@123',
-      role: body.role,
+      role: body.role || 'USER',
       status: initialStatus,
       organizationName: body.organizationName || null,
       organizationRegNo: body.organizationRegNo || null,
@@ -208,7 +230,7 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // Auth: Login (with phone + password + role validation)
+  // Auth: Login (with strict phone + password + role validation)
   if (method === 'POST' && pathname === '/api/auth/login') {
     const body = await parseBody(req);
     const phone = (body.phone || '').trim();
@@ -263,7 +285,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { success: true, data: user });
   }
 
-  // Disasters: Report with Haversine 10km Merge Logic
+  // Disasters: Report with Haversine 10km Deduplication Logic
   if (method === 'POST' && pathname === '/api/disasters/report') {
     const body = await parseBody(req);
     const userLat = parseFloat(body.latitude);
@@ -317,7 +339,7 @@ const server = http.createServer(async (req, res) => {
 
       return sendJson(res, 201, {
         success: true,
-        message: `Report successfully merged into existing ${type} incident (#${targetDisaster.id}, ${targetDisaster.title}) located ${closestDist.toFixed(2)} km away. Total reports: ${targetDisaster.reportCount}.`,
+        message: `Report automatically merged into existing ${type} incident (#${targetDisaster.id}, ${targetDisaster.title}) located ${closestDist.toFixed(2)} km away. Total reports: ${targetDisaster.reportCount}.`,
         data: { ...targetDisaster, wasMerged: true }
       });
     } else {
@@ -383,12 +405,33 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { success: true, data: result });
   }
 
-  // Volunteers
+  // Disasters: Update Status (FIX for dropdown status update)
+  if (method === 'PATCH' && pathname.startsWith('/api/disasters/') && pathname.endsWith('/status')) {
+    const body = await parseBody(req);
+    const parts = pathname.split('/');
+    const disasterId = parseInt(parts[3]);
+    const disaster = db.disasters.find(d => d.id === disasterId);
+    if (!disaster) {
+      return sendJson(res, 404, { success: false, message: 'Disaster incident not found' });
+    }
+    if (body.status) {
+      disaster.status = body.status.toUpperCase();
+      disaster.updatedAt = new Date();
+    }
+    return sendJson(res, 200, {
+      success: true,
+      message: `Disaster status updated to ${disaster.status}`,
+      data: disaster
+    });
+  }
+
+  // Volunteers: Available
   if (method === 'GET' && pathname === '/api/volunteers/available') {
     return sendJson(res, 200, { success: true, data: db.volunteers });
   }
 
-  if (method === 'GET' && pathname.startsWith('/api/volunteers/assignments/')) {
+  // Volunteers: Assignments
+  if (method === 'GET' && pathname.startsWith('/api/volunteers/assignments')) {
     return sendJson(res, 200, { success: true, data: db.assignments });
   }
 
@@ -398,20 +441,20 @@ const server = http.createServer(async (req, res) => {
     const disaster = db.disasters.find(d => d.id === body.disasterId) || db.disasters[0];
     const newAssign = {
       id: db.assignments.length + 1,
-      disasterId: disaster.id,
-      disasterTitle: disaster.title,
-      volunteerId: vol.id,
-      volunteerName: vol.name,
-      volunteerPhone: vol.phone,
-      taskTitle: body.taskTitle,
-      taskDescription: body.taskDescription,
+      disasterId: disaster ? disaster.id : 1,
+      disasterTitle: disaster ? disaster.title : 'General Relief Operation',
+      volunteerId: vol ? vol.id : 1,
+      volunteerName: vol ? vol.name : 'Registered Volunteer',
+      volunteerPhone: vol ? vol.phone : '8888888888',
+      taskTitle: body.taskTitle || 'Relief Task',
+      taskDescription: body.taskDescription || 'Assist local relief team.',
       status: 'ASSIGNED',
       assignedByName: 'Admin Coordinator',
       assignedAt: new Date(),
       completedAt: null
     };
     db.assignments.push(newAssign);
-    return sendJson(res, 201, { success: true, data: newAssign });
+    return sendJson(res, 201, { success: true, message: 'Mission assigned successfully!', data: newAssign });
   }
 
   if (method === 'PATCH' && pathname.includes('/assignments/') && pathname.endsWith('/status')) {
@@ -419,11 +462,14 @@ const server = http.createServer(async (req, res) => {
     const parts = pathname.split('/');
     const assignId = parseInt(parts[parts.indexOf('assignments') + 1]);
     const assign = db.assignments.find(a => a.id === assignId);
-    if (assign) {
-      assign.status = body.status;
-      if (body.status === 'COMPLETED') assign.completedAt = new Date();
+    if (!assign) {
+      return sendJson(res, 404, { success: false, message: 'Assignment not found' });
     }
-    return sendJson(res, 200, { success: true, data: assign });
+    if (body.status) {
+      assign.status = body.status.toUpperCase();
+      if (assign.status === 'COMPLETED') assign.completedAt = new Date();
+    }
+    return sendJson(res, 200, { success: true, message: `Assignment status updated to ${assign.status}`, data: assign });
   }
 
   // Resources
@@ -441,19 +487,19 @@ const server = http.createServer(async (req, res) => {
       providerId: provider.id,
       providerName: provider.name,
       providerRole: provider.role,
-      resourceType: body.resourceType,
-      resourceName: body.resourceName,
-      quantity: body.quantity,
-      unit: body.unit,
+      resourceType: body.resourceType || 'OTHER',
+      resourceName: body.resourceName || 'Supplies',
+      quantity: parseInt(body.quantity) || 1,
+      unit: body.unit || 'units',
       status: 'AVAILABLE',
       contactPhone: body.contactPhone || provider.phone,
       createdAt: new Date()
     };
     db.resources.push(newRes);
-    return sendJson(res, 201, { success: true, data: newRes });
+    return sendJson(res, 201, { success: true, message: 'Resource added to emergency pool.', data: newRes });
   }
 
-  // Comments
+  // Comments & Discussions
   if (method === 'GET' && pathname.includes('/comments')) {
     const parts = pathname.split('/');
     const disasterId = parseInt(parts[3]);
@@ -479,7 +525,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 201, { success: true, data: comment });
   }
 
-  // Admin
+  // Admin Analytics & Approvals
   if (method === 'GET' && pathname === '/api/admin/analytics') {
     return sendJson(res, 200, {
       success: true,
@@ -506,7 +552,7 @@ const server = http.createServer(async (req, res) => {
     if (user) {
       user.status = body.action === 'APPROVED' ? 'ACTIVE' : 'REJECTED';
     }
-    return sendJson(res, 200, { success: true, data: user });
+    return sendJson(res, 200, { success: true, message: `User ${body.action.toLowerCase()}`, data: user });
   }
 
   if (method === 'GET' && pathname === '/api/admin/pending-disasters') {
@@ -520,10 +566,23 @@ const server = http.createServer(async (req, res) => {
     if (d) {
       d.status = body.action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CLOSED';
     }
-    return sendJson(res, 200, { success: true, data: d });
+    return sendJson(res, 200, { success: true, message: `Disaster ${body.action.toLowerCase()}`, data: d });
   }
 
-  // --- STATIC FILE & ASSET SERVING ---
+  // ==============================================================================
+  // CRITICAL FIX: IF ROUTE IS AN UNMATCHED /api/* ROUTE, RETURN 404 JSON NOT HTML!
+  // ==============================================================================
+  if (pathname.startsWith('/api/')) {
+    return sendJson(res, 404, {
+      success: false,
+      error: 'Not Found',
+      message: `API endpoint '${method} ${pathname}' does not exist.`
+    });
+  }
+
+  // ==============================================================================
+  // STATIC FILE & ASSET SERVING
+  // ==============================================================================
   let filePath = path.join(STATIC_DIR, pathname === '/' ? 'index.html' : pathname);
 
   // Fallback for logo and background

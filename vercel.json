@@ -1,0 +1,44 @@
+{
+  "version": 2,
+  "name": "d-connect-disaster-management",
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "src/main/resources/static/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/src/main/resources/static/assets/$1"
+    },
+    {
+      "src": "/css/(.*)",
+      "dest": "/src/main/resources/static/css/$1"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "/src/main/resources/static/js/$1"
+    },
+    {
+      "src": "/favicon.(ico|png)",
+      "dest": "/src/main/resources/static/assets/logo.png"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/src/main/resources/static/index.html"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://qpxnsxphwufrnfejphat.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l"
+  }
+}

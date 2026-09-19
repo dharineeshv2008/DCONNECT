@@ -1,6 +1,6 @@
 /**
  * D-Connect Disaster Management Coordination App - Frontend Engine
- * Green Theme & Split-Screen Password Auth Coordinator
+ * Realtime Supabase Subscriptions, Toast Notifications, and Strict Manual Auth
  */
 
 const API_BASE = '/api';
@@ -14,30 +14,190 @@ const SUPABASE_CONFIG = {
 // Application State
 let currentUser = null;
 let selectedLoginRole = 'USER';
-let currentCoords = { latitude: 13.0827, longitude: 80.2707 }; // Default fallback coordinates
+let currentCoords = { latitude: 13.0827, longitude: 80.2707 }; // Fallback coordinates
 let activeDisasterIdForComments = null;
 let isOffline = !navigator.onLine;
+let supabaseClient = null;
 
-// Initialization
+// ==============================================================================
+// 1. INITIALIZATION & LIFECYCLE
+// ==============================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
   initNetworkListeners();
   initGeolocation();
+  initSupabaseRealtime();
   restoreSession();
 });
 
+// Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
+async function fetchAPI(endpoint, options = {}) {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const defaultHeaders = { 'Content-Type': 'application/json' };
+  
+  if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+    options.body = JSON.stringify(options.body);
+  }
+  options.headers = { ...defaultHeaders, ...options.headers };
+
+  try {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+    
+    let data;
+    if (contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        // If server returned HTML (e.g. 404 or 500 html page), format into a clean error object
+        data = {
+          success: false,
+          status: res.status,
+          message: res.status === 404 ? 'Resource or endpoint not found' : 'Server returned invalid response format'
+        };
+      }
+    }
+
+    if (!res.ok) {
+      const errorObj = new Error(data.message || `Request failed with HTTP status ${res.status}`);
+      errorObj.status = res.status;
+      errorObj.data = data;
+      throw errorObj;
+    }
+
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      err.message = 'Network error. Please check your internet connection.';
+    }
+    throw err;
+  }
+}
+
 // ==============================================================================
-// 1. NETWORK & ERROR MONITORING
+// 2. SUPABASE REALTIME SUBSCRIPTIONS
+// ==============================================================================
+
+function initSupabaseRealtime() {
+  try {
+    if (window.supabase && typeof window.supabase.createClient === 'function') {
+      supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.publishableKey);
+      console.log('⚡ [Supabase]: Realtime client initialized successfully.');
+
+      // Channel 1: Live Disasters
+      supabaseClient
+        .channel('public:disasters')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'disasters' }, payload => {
+          console.log('🚨 [Realtime]: Disaster change detected:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            showToast('New Incident Reported', `🚨 ${payload.new.title} (${payload.new.type})`, 'warning');
+          } else if (payload.eventType === 'UPDATE') {
+            showToast('Incident Updated', `Disaster #${payload.new.id} status changed to ${payload.new.status}`, 'info');
+          }
+          if (document.getElementById('feedTab')?.classList.contains('active')) {
+            loadDisasters();
+          }
+          if (currentUser?.role === 'ADMIN') {
+            loadAdminAnalytics();
+          }
+        })
+        .subscribe();
+
+      // Channel 2: Volunteer Assignments
+      supabaseClient
+        .channel('public:assignments')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, payload => {
+          console.log('🤝 [Realtime]: Volunteer mission update:', payload.eventType);
+          if (document.getElementById('volunteerTab')?.classList.contains('active')) {
+            loadVolunteerAssignments();
+          }
+        })
+        .subscribe();
+
+      // Channel 3: Discussion Comments
+      supabaseClient
+        .channel('public:comments')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
+          if (activeDisasterIdForComments && payload.new.disaster_id === activeDisasterIdForComments) {
+            loadComments(activeDisasterIdForComments);
+          }
+        })
+        .subscribe();
+
+    } else {
+      console.info('ℹ️ [Supabase]: SDK not loaded via CDN, continuing with standard REST pipeline.');
+    }
+  } catch (err) {
+    console.warn('⚠️ [Supabase Realtime]: Could not bind realtime subscriptions:', err.message);
+  }
+}
+
+// ==============================================================================
+// 3. TOAST NOTIFICATION ENGINE (REPLACES ALL RAW ALERTS)
+// ==============================================================================
+
+function showToast(title, message, type = 'info', durationMs = 4000) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast-item toast-${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${icons[type] || 'ℹ️'}</div>
+    <div class="toast-content">
+      <div class="toast-title">${escapeHtml(title)}</div>
+      <div class="toast-message">${escapeHtml(message)}</div>
+    </div>
+    <button class="toast-close-btn" onclick="dismissToast(this.parentElement)">✕</button>
+    <div class="toast-progress" style="animation-duration: ${durationMs}ms;"></div>
+  `;
+
+  container.appendChild(toast);
+
+  const timeoutId = setTimeout(() => {
+    dismissToast(toast);
+  }, durationMs);
+
+  toast._timeoutId = timeoutId;
+}
+
+function dismissToast(toastEl) {
+  if (!toastEl || toastEl._isDismissing) return;
+  toastEl._isDismissing = true;
+  clearTimeout(toastEl._timeoutId);
+  toastEl.classList.add('toast-hiding');
+  setTimeout(() => {
+    if (toastEl.parentElement) {
+      toastEl.parentElement.removeChild(toastEl);
+    }
+  }, 300);
+}
+
+// ==============================================================================
+// 4. NETWORK & ERROR MONITORING
 // ==============================================================================
 
 function initNetworkListeners() {
   window.addEventListener('offline', () => {
     isOffline = true;
     document.getElementById('offlineBanner').style.display = 'block';
+    showToast('Offline Mode', 'Internet connection lost. Working in offline mode.', 'error');
   });
 
   window.addEventListener('online', () => {
     isOffline = false;
     document.getElementById('offlineBanner').style.display = 'none';
+    showToast('Reconnected', 'Internet connection restored.', 'success');
     reloadCurrentData();
   });
 
@@ -53,7 +213,7 @@ function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
     return;
   }
 
-  if (err && err.status === 403 && (err.error === 'Account Pending Approval' || err.message?.includes('approved by the Administrator'))) {
+  if (err && err.status === 403 && (err.data?.error === 'Account Pending Approval' || err.message?.includes('approved by the Administrator'))) {
     showPendingApprovalView();
     return;
   }
@@ -73,7 +233,7 @@ function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
     return;
   }
 
-  alert(err.message || fallbackMessage);
+  showToast('Action Failed', err.message || fallbackMessage, 'error');
 }
 
 function hideAllErrorViews() {
@@ -120,7 +280,7 @@ function reloadCurrentData() {
 }
 
 // ==============================================================================
-// 2. GEOLOCATION (BROWSER GPS ONLY - NO GOOGLE MAPS)
+// 5. GEOLOCATION
 // ==============================================================================
 
 function initGeolocation() {
@@ -168,7 +328,7 @@ function populateFormCoords(lat, lon) {
 }
 
 // ==============================================================================
-// 3. STRICT MANUAL AUTHENTICATION (PHONE + PASSWORD & ROLE VALIDATION)
+// 6. STRICT MANUAL AUTHENTICATION (PHONE + PASSWORD)
 // ==============================================================================
 
 function selectLoginRole(role, btnEl) {
@@ -176,7 +336,6 @@ function selectLoginRole(role, btnEl) {
   document.querySelectorAll('#loginRoleTabs .role-tab-item').forEach(btn => btn.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
 
-  // STRICT MANUAL INPUT: Clear inputs and reset validation on role switch
   const phoneInput = document.getElementById('landingLoginPhone');
   const passInput = document.getElementById('landingLoginPassword');
   const alertBox = document.getElementById('landingLoginAlert');
@@ -196,7 +355,6 @@ function handleLoginInputChange() {
 
   if (!phoneInput || !passInput || !submitBtn) return;
 
-  // Sanitize phone to digits only in real-time
   phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 10);
   const phone = phoneInput.value;
   const password = passInput.value;
@@ -238,7 +396,6 @@ function showAuthLanding() {
   document.getElementById('authLandingScreen').style.display = 'flex';
   document.getElementById('mainDashboardApp').style.display = 'none';
   
-  // Ensure inputs are blank by default
   const phoneInput = document.getElementById('landingLoginPhone');
   const passInput = document.getElementById('landingLoginPassword');
   if (phoneInput) phoneInput.value = '';
@@ -278,6 +435,7 @@ function logout() {
   localStorage.removeItem('dconnect_user');
   hideAllErrorViews();
   showAuthLanding();
+  showToast('Logged Out', 'You have been safely signed out.', 'info');
 }
 
 function toggleOrgFields() {
@@ -322,29 +480,24 @@ async function handleLandingLogin(e) {
     return;
   }
 
-  // Loading state
   submitBtn.disabled = true;
   if (spinner) spinner.style.display = 'inline-block';
   if (btnText) btnText.textContent = 'Verifying...';
 
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const data = await fetchAPI('/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password, role: selectedLoginRole })
+      body: { phone, password, role: selectedLoginRole }
     });
-
-    const data = await res.json();
-    if (!res.ok) throw data;
 
     currentUser = data.data;
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     
-    // Clear sensitive password input from memory
     document.getElementById('landingLoginPassword').value = '';
 
     showDashboardApp();
     updateUserUI();
+    showToast('Welcome Back', `Logged in as ${currentUser.name}`, 'success');
 
     if (!currentUser.approved) {
       showPendingApprovalView();
@@ -376,14 +529,10 @@ async function handleRegister(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/auth/register`, {
+    const data = await fetchAPI('/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payload
     });
-
-    const data = await res.json();
-    if (!res.ok) throw data;
 
     currentUser = data.data;
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
@@ -394,8 +543,9 @@ async function handleRegister(e) {
 
     if (!currentUser.approved) {
       showPendingApprovalView();
+      showToast('Registration Pending', 'Your organization account is awaiting Admin verification.', 'warning');
     } else {
-      alert('Registration successful! Welcome to D-Connect, ' + currentUser.name);
+      showToast('Registration Success', `Welcome to D-Connect, ${currentUser.name}!`, 'success');
       switchTab('feedTab');
     }
   } catch (err) {
@@ -406,22 +556,21 @@ async function handleRegister(e) {
 async function checkApprovalStatus() {
   if (!currentUser) return;
   try {
-    const res = await fetch(`${API_BASE}/auth/profile/${currentUser.id}`);
-    const data = await res.json();
-    if (res.ok && data.data) {
+    const data = await fetchAPI(`/auth/profile/${currentUser.id}`);
+    if (data.data) {
       if (data.data.status === 'ACTIVE') {
         currentUser.status = 'ACTIVE';
         currentUser.approved = true;
         localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
         updateUserUI();
         hideAllErrorViews();
-        alert('Your account is now APPROVED! You have full access.');
+        showToast('Account Approved', 'Your organization has been approved by the Administrator!', 'success');
         switchTab('feedTab');
       } else if (data.data.status === 'REJECTED') {
-        alert('Your organization application was rejected by the administrator.');
+        showToast('Account Rejected', 'Your organization application was rejected by administrator.', 'error');
         logout();
       } else {
-        alert('Your account is still pending administrator review.');
+        showToast('Pending Review', 'Your account is still awaiting administrative review.', 'info');
       }
     }
   } catch (err) {
@@ -430,7 +579,7 @@ async function checkApprovalStatus() {
 }
 
 // ==============================================================================
-// 4. DISASTER REPORTING & HAVERSINE MERGE ENGINE
+// 7. DISASTER REPORTING & HAVERSINE DEDUPLICATION
 // ==============================================================================
 
 async function handleDisasterSubmit(e) {
@@ -452,14 +601,10 @@ async function handleDisasterSubmit(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/disasters/report`, {
+    const data = await fetchAPI('/disasters/report', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payload
     });
-
-    const data = await res.json();
-    if (!res.ok) throw data;
 
     const disaster = data.data;
     if (disaster.wasMerged) {
@@ -470,6 +615,7 @@ async function handleDisasterSubmit(e) {
           Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>) now has <strong>${disaster.reportCount} reports</strong>.
         </div>
       `;
+      showToast('Incident Merged', `Deduplicated into Incident #${disaster.id} (${disaster.reportCount} reports)`, 'info');
     } else {
       alertBox.innerHTML = `
         <div class="alert alert-success">
@@ -478,6 +624,7 @@ async function handleDisasterSubmit(e) {
           Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>).
         </div>
       `;
+      showToast('Incident Reported', `Dispatched #${disaster.id} to emergency pipeline.`, 'success');
     }
 
     document.getElementById('disasterReportForm').reset();
@@ -496,14 +643,11 @@ async function loadDisasters() {
   const typeFilter = document.getElementById('feedTypeFilter')?.value;
   const statusFilter = document.getElementById('feedStatusFilter')?.value;
 
-  let url = `${API_BASE}/disasters?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`;
+  let url = `/disasters?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`;
   if (statusFilter) url += `&status=${statusFilter}`;
 
   try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI(url);
     let list = data.data || [];
     if (typeFilter) {
       list = list.filter(d => d.type === typeFilter);
@@ -544,7 +688,7 @@ async function loadDisasters() {
             <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬 Discussion</button>
             <button class="btn btn-secondary btn-sm" onclick="openAssignTaskModal(${d.id})">🎯 Assign Task</button>
             ${currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'GOVERNMENT_AGENCY') ? `
-              <button class="btn btn-outline btn-sm" onclick="updateDisasterStatusPrompt(${d.id})">⚙️ Update Status</button>
+              <button class="btn btn-outline btn-sm" onclick="openStatusUpdateModal(${d.id}, '${escapeHtml(d.title)}', '${d.status}')">⚙️ Update Status</button>
             ` : ''}
           </div>
         </div>
@@ -555,27 +699,38 @@ async function loadDisasters() {
   }
 }
 
-async function updateDisasterStatusPrompt(disasterId) {
-  const newStatus = prompt("Enter new status (VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED):");
-  if (!newStatus) return;
+// Interactive Dropdown Modal for Status Update (Replaces text prompt)
+function openStatusUpdateModal(disasterId, title, currentStatus) {
+  document.getElementById('statusModalDisasterId').value = disasterId;
+  document.getElementById('statusModalDisasterTitle').value = `#${disasterId} - ${title}`;
+  const select = document.getElementById('statusModalSelect');
+  if (select && currentStatus) {
+    select.value = currentStatus;
+  }
+  openModal('statusUpdateModal');
+}
+
+async function handleStatusUpdateSubmit(e) {
+  e.preventDefault();
+  const disasterId = document.getElementById('statusModalDisasterId').value;
+  const newStatus = document.getElementById('statusModalSelect').value;
 
   try {
-    const res = await fetch(`${API_BASE}/disasters/${disasterId}/status?actorId=${currentUser ? currentUser.id : ''}`, {
+    const data = await fetchAPI(`/disasters/${disasterId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus.toUpperCase().trim() })
+      body: { status: newStatus }
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
-    alert("Disaster status successfully updated!");
+
+    closeModal('statusUpdateModal');
+    showToast('Status Updated', `Incident #${disasterId} changed to ${newStatus}`, 'success');
     loadDisasters();
   } catch (err) {
-    handleApiError(err);
+    handleApiError(err, 'Failed to update disaster status.');
   }
 }
 
 // ==============================================================================
-// 5. VOLUNTEER MISSIONS & ASSIGNMENT HUB
+// 8. VOLUNTEER MISSIONS & ASSIGNMENT HUB
 // ==============================================================================
 
 async function loadVolunteerData() {
@@ -587,16 +742,10 @@ async function loadVolunteerAssignments() {
   const container = document.getElementById('volunteerAssignmentsList');
   if (!container) return;
 
-  let url = `${API_BASE}/volunteers/assignments/disaster/1`;
-  if (currentUser && currentUser.role === 'VOLUNTEER') {
-    url = `${API_BASE}/volunteers/assignments/volunteer/${currentUser.id}`;
-  }
+  let url = '/volunteers/assignments';
 
   try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI(url);
     const list = data.data || [];
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No rescue mission assignments found.</p>`;
@@ -614,10 +763,15 @@ async function loadVolunteerAssignments() {
         </div>
         <p style="font-size: 0.85rem; margin: 6px 0;">${escapeHtml(a.taskDescription)}</p>
         
-        ${currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO') && a.status !== 'COMPLETED' ? `
-          <div style="margin-top: 8px;">
-            <button class="btn btn-success btn-sm" onclick="updateMissionStatus(${a.id}, 'COMPLETED')">✓ Mark Completed</button>
-            <button class="btn btn-outline btn-sm" onclick="updateMissionStatus(${a.id}, 'IN_PROGRESS')">⏳ In Progress</button>
+        ${currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO') ? `
+          <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 0.8rem; font-weight: 700;">Status:</label>
+            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem;" onchange="updateMissionStatus(${a.id}, this.value)">
+              <option value="ASSIGNED" ${a.status === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
+              <option value="IN_PROGRESS" ${a.status === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
+              <option value="COMPLETED" ${a.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
+              <option value="CANCELLED" ${a.status === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
+            </select>
           </div>
         ` : ''}
       </div>
@@ -629,14 +783,11 @@ async function loadVolunteerAssignments() {
 
 async function updateMissionStatus(assignmentId, newStatus) {
   try {
-    const res = await fetch(`${API_BASE}/volunteers/assignments/${assignmentId}/status?userId=${currentUser ? currentUser.id : ''}`, {
+    const data = await fetchAPI(`/volunteers/assignments/${assignmentId}/status`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus })
+      body: { status: newStatus }
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
-    alert("Mission status updated to " + newStatus);
+    showToast('Mission Updated', `Assignment marked as ${newStatus}`, 'success');
     loadVolunteerAssignments();
   } catch (err) {
     handleApiError(err);
@@ -648,13 +799,10 @@ async function loadVolunteersDirectory() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI(`/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
     const list = data.data || [];
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No available volunteers found in the pool.</p>`;
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No available volunteers in the registry.</p>`;
       return;
     }
 
@@ -682,8 +830,7 @@ async function openAssignTaskModal(disasterId) {
   openModal('taskAssignModal');
 
   try {
-    const res = await fetch(`${API_BASE}/volunteers/available`);
-    const data = await res.json();
+    const data = await fetchAPI('/volunteers/available');
     const volunteers = data.data || [];
     if (volunteers.length === 0) {
       select.innerHTML = '<option value="">No volunteers available right now</option>';
@@ -708,15 +855,12 @@ async function handleAssignTaskSubmit(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/volunteers/assignments`, {
+    await fetchAPI('/volunteers/assignments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payload
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
 
-    alert("Rescue mission successfully dispatched!");
+    showToast('Task Dispatched', 'Volunteer assigned to mission successfully!', 'success');
     closeModal('taskAssignModal');
     loadVolunteerAssignments();
   } catch (err) {
@@ -725,7 +869,7 @@ async function handleAssignTaskSubmit(e) {
 }
 
 // ==============================================================================
-// 6. RESOURCE MANAGEMENT
+// 9. RESOURCE MANAGEMENT
 // ==============================================================================
 
 async function loadResources() {
@@ -733,13 +877,10 @@ async function loadResources() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/resources`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI('/resources');
     const list = data.data || [];
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies in the emergency pool yet.</p>`;
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
       return;
     }
 
@@ -773,15 +914,12 @@ async function handleResourceSubmit(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/resources`, {
+    await fetchAPI('/resources', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payload
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
 
-    alert("Resource successfully contributed to emergency pool!");
+    showToast('Resource Added', 'Emergency supply contribution added to pool!', 'success');
     document.getElementById('resourceForm').reset();
     loadResources();
   } catch (err) {
@@ -790,12 +928,12 @@ async function handleResourceSubmit(e) {
 }
 
 // ==============================================================================
-// 7. DISCUSSION & COMMENTS
+// 10. DISCUSSION & COMMENTS
 // ==============================================================================
 
 async function openDiscussionModal(disasterId, title) {
   activeDisasterIdForComments = disasterId;
-  document.getElementById('discussionModalTitle').textContent = `💬 Incident #${disasterId} Coordination Discussion`;
+  document.getElementById('discussionModalTitle').textContent = `💬 Incident #${disasterId} Discussion`;
   openModal('discussionModal');
   loadComments(disasterId);
 }
@@ -805,10 +943,7 @@ async function loadComments(disasterId) {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/disasters/${disasterId}/comments`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI(`/disasters/${disasterId}/comments`);
     const list = data.data || [];
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No coordination messages posted yet.</p>`;
@@ -840,23 +975,21 @@ async function handlePostComment(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/disasters/${activeDisasterIdForComments}/comments`, {
+    await fetchAPI(`/disasters/${activeDisasterIdForComments}/comments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: payload
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
 
     textInput.value = '';
     loadComments(activeDisasterIdForComments);
+    showToast('Comment Posted', 'Coordination message broadcast to teams.', 'info');
   } catch (err) {
     handleApiError(err);
   }
 }
 
 // ==============================================================================
-// 8. ADMIN COMMAND CENTER & ANALYTICS
+// 11. ADMIN COMMAND CENTER & ANALYTICS
 // ==============================================================================
 
 async function loadAdminData() {
@@ -872,10 +1005,7 @@ async function loadAdminData() {
 
 async function loadAdminAnalytics() {
   try {
-    const res = await fetch(`${API_BASE}/admin/analytics`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI('/admin/analytics');
     const kpi = data.data;
     document.getElementById('kpiActiveDisasters').textContent = kpi.activeDisasters;
     document.getElementById('kpiReportsAggregated').textContent = kpi.totalReportsAggregated;
@@ -891,10 +1021,7 @@ async function loadAdminPendingUsers() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/admin/pending-users`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI('/admin/pending-users');
     const list = data.data || [];
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No organizations pending approval.</p>`;
@@ -923,20 +1050,17 @@ async function loadAdminPendingUsers() {
 
 async function adminApproveUser(userId, action) {
   try {
-    const res = await fetch(`${API_BASE}/admin/approve-user`, {
+    await fetchAPI('/admin/approve-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         adminId: currentUser.id,
         userId: userId,
         action: action,
         comments: action === 'APPROVED' ? 'Verified organization credentials' : 'Failed verification'
-      })
+      }
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
 
-    alert(`Organization ${action.toLowerCase()} successfully.`);
+    showToast('Organization Reviewed', `Organization marked as ${action.toLowerCase()}`, 'success');
     loadAdminData();
   } catch (err) {
     handleApiError(err);
@@ -948,10 +1072,7 @@ async function loadAdminPendingDisasters() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_BASE}/admin/pending-disasters`);
-    const data = await res.json();
-    if (!res.ok) throw data;
-
+    const data = await fetchAPI('/admin/pending-disasters');
     const list = data.data || [];
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>`;
@@ -981,20 +1102,17 @@ async function loadAdminPendingDisasters() {
 
 async function adminApproveDisaster(disasterId, action) {
   try {
-    const res = await fetch(`${API_BASE}/admin/approve-disaster`, {
+    await fetchAPI('/admin/approve-disaster', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         adminId: currentUser.id,
         disasterId: disasterId,
         action: action,
         comments: action === 'APPROVED' ? 'Report verified by incident commander' : 'False alarm'
-      })
+      }
     });
-    const data = await res.json();
-    if (!res.ok) throw data;
 
-    alert(`Disaster report ${action.toLowerCase()}.`);
+    showToast('Report Processed', `Incident marked as ${action.toLowerCase()}`, 'info');
     loadAdminData();
     loadDisasters();
   } catch (err) {
@@ -1003,7 +1121,7 @@ async function adminApproveDisaster(disasterId, action) {
 }
 
 // ==============================================================================
-// 9. UI NAVIGATION & MODALS
+// 12. UI NAVIGATION & MODALS
 // ==============================================================================
 
 function switchTab(tabId) {
@@ -1030,11 +1148,13 @@ function hideAllTabs() {
 }
 
 function openModal(id) {
-  document.getElementById(id).classList.add('active');
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('active');
 }
 
 function openRegisterModal() { openModal('registerModal'); }
