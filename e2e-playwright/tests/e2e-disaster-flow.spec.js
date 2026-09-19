@@ -120,6 +120,7 @@ test.describe('Disaster Management Full-Stack E2E Suite', () => {
     // Switch to Live Disasters Feed
     await page.locator('.nav-btn:has-text("Live Disasters")').click();
     await expect(page.locator('#disasterFeedList')).toBeVisible();
+    await expect(page.locator('.disaster-card').first()).toBeVisible({ timeout: 10000 });
 
     const initialIncidentCards = await page.locator('.disaster-card').count();
     expect(initialIncidentCards).toBeGreaterThan(0);
