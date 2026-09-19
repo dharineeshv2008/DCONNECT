@@ -657,12 +657,15 @@
         <div class="form-group">
           <label>Select New Operational Status *</label>
           <select id="statusModalSelect" class="form-control" required style="font-weight: 700;">
-            <option value="IN_PROGRESS">🟡 IN_PROGRESS (Rescue & relief operations active)</option>
-            <option value="COMPLETED">🟢 COMPLETED (Relief operations concluded)</option>
-            <option value="CANCELLED">⚪ CANCELLED (Operation cancelled or false alarm)</option>
+            <option value="IN_PROGRESS">🟡 In Progress (Rescue & relief operations active)</option>
+            <option value="Open">🟢 Open / Verified Active</option>
+            <option value="COMPLETED">✅ Completed / Resolved</option>
+            <option value="Closed">📁 Closed / Archived</option>
+            <option value="Cancelled by Admin">⚪ Cancelled by Admin (False alarm / Cancelled)</option>
             <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed disaster)</option>
             <option value="RESOLVED">✅ RESOLVED (Situation stabilized)</option>
             <option value="CLOSED">📁 CLOSED (Incident archived)</option>
+            <option value="CANCELLED">⚪ CANCELLED (Operation cancelled)</option>
           </select>
         </div>
         <button type="submit" class="btn btn-primary btn-block">Apply Status Change</button>

@@ -1,74 +1,51 @@
 /**
- * Supabase Data Access Layer
- * Direct PostgREST client for real database persistence (no mock data)
- * Uses SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+ * Supabase Data Access Layer using official @supabase/supabase-js client
  */
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-                     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
-                     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
-                     'sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l';
+const { createClient } = require('@supabase/supabase-js');
 
-const defaultHeaders = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Content-Type': 'application/json'
-};
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
+                    'sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l';
 
-async function query(tableWithParams, options = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${tableWithParams}`;
-  const fetchOptions = {
-    method: options.method || 'GET',
-    headers: {
-      ...defaultHeaders,
-      ...(options.headers || {})
-    }
-  };
-
-  if (options.body) {
-    fetchOptions.body = JSON.stringify(options.body);
-  }
-
-  const res = await fetch(url, fetchOptions);
-  const text = await res.text();
-  
-  let data;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (e) {
-    data = text;
-  }
-
-  if (!res.ok) {
-    const errMessage = typeof data === 'object' && data ? (data.message || JSON.stringify(data)) : String(data);
-    const err = new Error(`Supabase query failed [${res.status}]: ${errMessage}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
-}
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const supabaseDb = {
+  supabase,
+
   // --- USERS ---
   async getUserByPhone(phone) {
-    const rows = await query(`users?phone=eq.${encodeURIComponent(phone)}&limit=1`);
-    return rows && rows.length > 0 ? rows[0] : null;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('phone', phone)
+      .limit(1);
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async getUserById(id) {
-    const rows = await query(`users?id=eq.${id}&limit=1`);
-    return rows && rows.length > 0 ? rows[0] : null;
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .limit(1);
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async getAllUsers() {
-    return await query('users?select=*&order=created_at.desc');
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
 
   async createUser(userData) {
-    // Sanitize to only valid Supabase users table columns
     const cleanUser = {
       name: userData.name || 'Citizen',
       phone: userData.phone,
@@ -78,25 +55,24 @@ const supabaseDb = {
       organization_reg_no: userData.organizationRegNo || userData.organization_reg_no || null
     };
 
-    const inserted = await query('users', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: cleanUser
-    });
-    
-    const userRecord = inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('users')
+      .insert([cleanUser])
+      .select();
 
-    // If volunteer skills provided, store in volunteers table
+    if (error) throw error;
+    const userRecord = data && data.length > 0 ? data[0] : null;
+
     if (userRecord && (userData.role === 'VOLUNTEER' || userData.skills)) {
       try {
-        await this.createVolunteerProfile({
+        await supabase.from('volunteers').insert([{
           user_id: userRecord.id,
           skills: userData.skills || userData.volunteerSkills || 'General Relief',
           availability_status: 'AVAILABLE',
           helped_count: 0
-        });
+        }]);
       } catch (err) {
-        console.warn('Volunteer profile creation notice:', err.message);
+        console.warn('Volunteer creation notice:', err.message);
       }
     }
 
@@ -104,26 +80,39 @@ const supabaseDb = {
   },
 
   async updateUser(id, updates) {
-    const updated = await query(`users?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=representation' },
-      body: updates
-    });
-    return updated && updated[0] ? updated[0] : updated;
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async getPendingUsers() {
-    return await query('users?status=eq.PENDING_APPROVAL&order=created_at.desc');
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('status', 'PENDING_APPROVAL')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
 
-  // --- DISASTERS / INCIDENTS ---
+  // --- INCIDENTS / DISASTERS ---
   async getAllDisasters(statusFilter = null) {
-    let q = 'disasters?select=*,creator:created_by_user_id(name,role)&order=created_at.desc';
+    let query = supabase
+      .from('disasters')
+      .select('*, creator:created_by_user_id(name,role)')
+      .order('created_at', { ascending: false });
+
     if (statusFilter) {
-      q = `disasters?select=*,creator:created_by_user_id(name,role)&status=eq.${encodeURIComponent(statusFilter)}&order=created_at.desc`;
+      query = query.eq('status', statusFilter);
     }
-    const rows = await query(q);
-    return rows.map(r => ({
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(r => ({
       ...r,
       createdByName: r.creator?.name || 'Authorized Responder',
       createdByRole: r.creator?.role || 'PUBLIC'
@@ -132,14 +121,26 @@ const supabaseDb = {
 
   async getCandidateDisastersForMerge(type) {
     const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
-    const q = `disasters?type=eq.${encodeURIComponent(type)}&status=in.(PENDING,VERIFIED_ACTIVE,IN_PROGRESS)&created_at=gte.${threeHoursAgo}&order=created_at.desc`;
-    return await query(q);
+    const { data, error } = await supabase
+      .from('disasters')
+      .select('*')
+      .eq('type', type)
+      .in('status', ['PENDING', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'Open', 'In Progress'])
+      .gte('created_at', threeHoursAgo)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
 
   async getDisasterById(id) {
-    const rows = await query(`disasters?id=eq.${id}&select=*,creator:created_by_user_id(name,role)&limit=1`);
-    if (!rows || rows.length === 0) return null;
-    const r = rows[0];
+    const { data, error } = await supabase
+      .from('disasters')
+      .select('*, creator:created_by_user_id(name,role)')
+      .eq('id', id)
+      .limit(1);
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    const r = data[0];
     return {
       ...r,
       createdByName: r.creator?.name || 'Authorized Responder',
@@ -148,26 +149,32 @@ const supabaseDb = {
   },
 
   async createDisaster(disasterData) {
-    const inserted = await query('disasters', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: disasterData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('disasters')
+      .insert([disasterData])
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async updateDisaster(id, updates) {
-    const updated = await query(`disasters?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=representation' },
-      body: updates
-    });
-    return updated && updated[0] ? updated[0] : updated;
+    const { data, error } = await supabase
+      .from('disasters')
+      .update(updates)
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async getPendingDisasters() {
-    const rows = await query('disasters?status=eq.PENDING&select=*,creator:created_by_user_id(name,role)&order=created_at.desc');
-    return rows.map(r => ({
+    const { data, error } = await supabase
+      .from('disasters')
+      .select('*, creator:created_by_user_id(name,role)')
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(r => ({
       ...r,
       createdByName: r.creator?.name || 'Citizen Reporter',
       createdByRole: r.creator?.role || 'PUBLIC'
@@ -176,18 +183,22 @@ const supabaseDb = {
 
   // --- REPORTS ---
   async createReport(reportData) {
-    const inserted = await query('reports', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: reportData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('reports')
+      .insert([reportData])
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   // --- VOLUNTEERS ---
   async getVolunteers() {
-    const rows = await query('volunteers?select=*,users:user_id(id,name,phone,status)&order=helped_count.desc');
-    return rows.map(v => ({
+    const { data, error } = await supabase
+      .from('volunteers')
+      .select('*, users:user_id(id,name,phone,status)')
+      .order('helped_count', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(v => ({
       id: v.id,
       userId: v.user_id,
       name: v.users?.name || 'Volunteer',
@@ -200,25 +211,14 @@ const supabaseDb = {
     }));
   },
 
-  async createVolunteerProfile(volData) {
-    const inserted = await query('volunteers', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: volData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
-  },
-
   // --- ASSIGNMENTS ---
-  async getAssignments(volunteerId = null, disasterId = null) {
-    let q = 'assignments?select=*,users:volunteer_id(name,phone),disasters(title)&order=assigned_at.desc';
-    if (volunteerId) {
-      q = `assignments?volunteer_id=eq.${volunteerId}&select=*,users:volunteer_id(name,phone),disasters(title)&order=assigned_at.desc`;
-    } else if (disasterId) {
-      q = `assignments?disaster_id=eq.${disasterId}&select=*,users:volunteer_id(name,phone),disasters(title)&order=assigned_at.desc`;
-    }
-    const rows = await query(q);
-    return rows.map(a => ({
+  async getAssignments() {
+    const { data, error } = await supabase
+      .from('assignments')
+      .select('*, users:volunteer_id(name,phone), disasters(title)')
+      .order('assigned_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(a => ({
       id: a.id,
       disasterId: a.disaster_id,
       disasterTitle: a.disasters?.title || 'Relief Operation',
@@ -234,31 +234,35 @@ const supabaseDb = {
   },
 
   async createAssignment(assignmentData) {
-    const inserted = await query('assignments', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: assignmentData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('assignments')
+      .insert([assignmentData])
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   async updateAssignmentStatus(id, newStatus) {
-    const updates = {
-      status: newStatus,
-      completed_at: newStatus === 'COMPLETED' ? new Date().toISOString() : null
-    };
-    const updated = await query(`assignments?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: { 'Prefer': 'return=representation' },
-      body: updates
-    });
-    return updated && updated[0] ? updated[0] : updated;
+    const { data, error } = await supabase
+      .from('assignments')
+      .update({
+        status: newStatus,
+        completed_at: newStatus === 'COMPLETED' ? new Date().toISOString() : null
+      })
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   // --- RESOURCES ---
   async getResources() {
-    const rows = await query('resources?select=*,users:provider_id(name,role,phone),disasters(title)&order=created_at.desc');
-    return rows.map(r => ({
+    const { data, error } = await supabase
+      .from('resources')
+      .select('*, users:provider_id(name,role,phone), disasters(title)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(r => ({
       id: r.id,
       disasterId: r.disaster_id,
       disasterTitle: r.disasters?.title || 'General Emergency Supply Pool',
@@ -276,18 +280,23 @@ const supabaseDb = {
   },
 
   async createResource(resData) {
-    const inserted = await query('resources', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: resData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('resources')
+      .insert([resData])
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   // --- COMMENTS ---
   async getComments(disasterId) {
-    const rows = await query(`comments?disaster_id=eq.${disasterId}&select=*,users:user_id(name,role)&order=created_at.asc`);
-    return rows.map(c => ({
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*, users:user_id(name,role)')
+      .eq('disaster_id', disasterId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(c => ({
       id: c.id,
       disasterId: c.disaster_id,
       userId: c.user_id,
@@ -299,38 +308,38 @@ const supabaseDb = {
   },
 
   async createComment(commentData) {
-    const inserted = await query('comments', {
-      method: 'POST',
-      headers: { 'Prefer': 'return=representation' },
-      body: commentData
-    });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    const { data, error } = await supabase
+      .from('comments')
+      .insert([commentData])
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
   },
 
   // --- ANALYTICS ---
   async getAnalytics() {
-    const [disasters, users, volunteers, resources] = await Promise.all([
-      query('disasters?select=id,status,report_count'),
-      query('users?select=id,status'),
-      query('volunteers?select=id'),
-      query('resources?select=id')
+    const [{ data: disasters }, { data: users }, { data: volunteers }, { data: resources }] = await Promise.all([
+      supabase.from('disasters').select('id,status,report_count'),
+      supabase.from('users').select('id,status'),
+      supabase.from('volunteers').select('id'),
+      supabase.from('resources').select('id')
     ]);
 
-    const activeDisasters = disasters.filter(d => ['VERIFIED_ACTIVE', 'IN_PROGRESS'].includes(d.status)).length;
-    const pendingDisasters = disasters.filter(d => d.status === 'PENDING').length;
-    const totalReports = disasters.reduce((sum, d) => sum + (d.report_count || 1), 0);
-    const pendingUsers = users.filter(u => u.status === 'PENDING_APPROVAL').length;
+    const activeDisasters = (disasters || []).filter(d => ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'Open', 'In Progress'].includes(d.status)).length;
+    const pendingDisasters = (disasters || []).filter(d => d.status === 'PENDING').length;
+    const totalReports = (disasters || []).reduce((sum, d) => sum + (d.report_count || 1), 0);
+    const pendingUsers = (users || []).filter(u => u.status === 'PENDING_APPROVAL').length;
 
     return {
-      totalDisasters: disasters.length,
+      totalDisasters: (disasters || []).length,
       activeDisasters,
       pendingDisasters,
       totalReportsAggregated: totalReports,
-      activeVolunteers: volunteers.length,
-      totalResourcesAvailable: resources.length,
+      activeVolunteers: (volunteers || []).length,
+      totalResourcesAvailable: (resources || []).length,
       pendingUserApprovals: pendingUsers
     };
   }
 };
 
-module.exports = { supabaseDb, query };
+module.exports = { supabase, supabaseDb };

@@ -14,6 +14,18 @@
       "destination": "/api/auth/profile.js"
     },
     {
+      "source": "/api/incidents/create",
+      "destination": "/api/incidents/create.js"
+    },
+    {
+      "source": "/api/incidents/update",
+      "destination": "/api/incidents/update.js"
+    },
+    {
+      "source": "/api/incidents/list",
+      "destination": "/api/incidents/list.js"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },

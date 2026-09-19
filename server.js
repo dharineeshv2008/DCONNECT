@@ -206,7 +206,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 4. Disasters & Incidents: List
-    if (method === 'GET' && (pathname === '/api/disasters' || pathname === '/api/incidents')) {
+    if (method === 'GET' && (pathname === '/api/disasters' || pathname === '/api/incidents' || pathname === '/api/incidents/list')) {
       const userLat = parseFloat(parsedUrl.query.lat);
       const userLon = parseFloat(parsedUrl.query.lon);
       const status = parsedUrl.query.status;
@@ -239,8 +239,8 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { success: true, data: result });
     }
 
-    // 5. Disasters & Incidents: Report (with Haversine 10km Deduplication)
-    if (method === 'POST' && (pathname === '/api/disasters/report' || pathname === '/api/incidents/report' || pathname === '/api/reports')) {
+    // 5. Disasters & Incidents: Report / Create (with Haversine 10km Deduplication)
+    if (method === 'POST' && (pathname === '/api/disasters/report' || pathname === '/api/incidents/report' || pathname === '/api/reports' || pathname === '/api/incidents/create')) {
       const body = await parseBody(req);
       const userLat = parseFloat(body.latitude);
       const userLon = parseFloat(body.longitude);
@@ -335,6 +335,33 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 6. Disasters & Incidents: Update Status
+    if ((method === 'POST' || method === 'PATCH' || method === 'PUT') && pathname === '/api/incidents/update') {
+      const body = await parseBody(req);
+      const incidentId = parseInt(body.incidentId || body.disasterId || body.id);
+      let statusInput = (body.status || 'IN_PROGRESS').trim();
+
+      if (!incidentId || isNaN(incidentId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required.' });
+      }
+
+      let dbStatus = statusInput.toUpperCase();
+      if (statusInput === 'Open') dbStatus = 'VERIFIED_ACTIVE';
+      if (statusInput === 'In Progress') dbStatus = 'IN_PROGRESS';
+      if (statusInput === 'Closed') dbStatus = 'CLOSED';
+      if (statusInput === 'Cancelled by Admin') dbStatus = 'CANCELLED';
+
+      const updated = await supabaseDb.updateDisaster(incidentId, {
+        status: dbStatus,
+        updated_at: new Date().toISOString()
+      });
+
+      return sendJson(res, 200, {
+        success: true,
+        message: `Incident #${incidentId} status updated to '${dbStatus}'.`,
+        data: updated
+      });
+    }
+
     if (method === 'PATCH' && (pathname.includes('/disasters/') || pathname.includes('/incidents/')) && pathname.endsWith('/status')) {
       const body = await parseBody(req);
       const parts = pathname.split('/');
