@@ -95,23 +95,31 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 1. Auth: Login
-    if (method === 'POST' && pathname === '/api/auth/login') {
+    if (pathname === '/api/auth/login') {
+      if (method !== 'POST') {
+        return sendJson(res, 405, { success: false, error: 'Method Not Allowed', message: `Method ${method} not allowed on /api/auth/login. Use POST.` });
+      }
       const body = await parseBody(req);
       const phone = (body.phone || '').trim();
       const password = body.password || '';
       const selectedRole = body.role;
 
-      if (!phone || phone.length !== 10) {
-        return sendJson(res, 400, { success: false, message: 'Valid 10-digit phone number is required.' });
+      if (!password) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Password is required.' });
       }
 
       const user = await supabaseDb.getUserByPhone(phone);
       if (!user) {
-        return sendJson(res, 400, { success: false, message: 'Invalid credentials. Please check your phone number and password.' });
+        return sendJson(res, 401, { success: false, error: 'Unauthorized', message: 'Invalid credentials. Please check your phone number and password.' });
       }
 
-      if (user.password && password !== user.password && password !== 'Password@123' && password !== 'Admin@123') {
-        return sendJson(res, 400, { success: false, message: 'Invalid credentials. Please check your phone number and password.' });
+      const dbPassword = user.password || user.password_hash;
+      const isPasswordValid = dbPassword 
+        ? (password === dbPassword || password === 'Password@123' || password === 'Admin@123')
+        : (password === 'Password@123' || password === 'Admin@123');
+
+      if (!isPasswordValid) {
+        return sendJson(res, 401, { success: false, error: 'Unauthorized', message: 'Invalid credentials. Please check your phone number and password.' });
       }
 
       if (selectedRole && user.role !== selectedRole) {
@@ -144,7 +152,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 2. Auth: Register
-    if (method === 'POST' && pathname === '/api/auth/register') {
+    if (pathname === '/api/auth/register') {
+      if (method !== 'POST') {
+        return sendJson(res, 405, { success: false, error: 'Method Not Allowed', message: `Method ${method} not allowed on /api/auth/register. Use POST.` });
+      }
       const body = await parseBody(req);
       const phone = (body.phone || '').trim();
       if (!phone || phone.length !== 10) {

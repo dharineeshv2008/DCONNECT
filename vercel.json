@@ -2,12 +2,29 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/auth/register",
+      "destination": "/api/auth/register.js"
+    },
+    {
+      "source": "/api/auth/login",
+      "destination": "/api/auth/login.js"
+    },
+    {
+      "source": "/api/auth/profile/(.*)",
+      "destination": "/api/auth/profile.js"
+    },
+    {
       "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api/index.js"
     },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://qpxnsxphwufrnfejphat.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l",
+    "SUPABASE_SERVICE_ROLE_KEY": "sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l"
+  }
 }

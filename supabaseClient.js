@@ -1,10 +1,14 @@
 /**
  * Supabase Data Access Layer
  * Direct PostgREST client for real database persistence (no mock data)
+ * Uses SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
  */
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co';
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 
+                     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 
+                     'sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l';
 
 const defaultHeaders = {
   'apikey': SUPABASE_KEY,
@@ -37,7 +41,8 @@ async function query(tableWithParams, options = {}) {
   }
 
   if (!res.ok) {
-    const err = new Error(`Supabase query failed [${res.status}]: ${typeof data === 'object' ? (data.message || JSON.stringify(data)) : data}`);
+    const errMessage = typeof data === 'object' && data ? (data.message || JSON.stringify(data)) : String(data);
+    const err = new Error(`Supabase query failed [${res.status}]: ${errMessage}`);
     err.status = res.status;
     err.data = data;
     throw err;
@@ -63,12 +68,39 @@ const supabaseDb = {
   },
 
   async createUser(userData) {
+    // Sanitize to only valid Supabase users table columns
+    const cleanUser = {
+      name: userData.name || 'Citizen',
+      phone: userData.phone,
+      role: userData.role || 'USER',
+      status: userData.status || 'ACTIVE',
+      organization_name: userData.organizationName || userData.organization_name || null,
+      organization_reg_no: userData.organizationRegNo || userData.organization_reg_no || null
+    };
+
     const inserted = await query('users', {
       method: 'POST',
       headers: { 'Prefer': 'return=representation' },
-      body: userData
+      body: cleanUser
     });
-    return inserted && inserted[0] ? inserted[0] : inserted;
+    
+    const userRecord = inserted && inserted[0] ? inserted[0] : inserted;
+
+    // If volunteer skills provided, store in volunteers table
+    if (userRecord && (userData.role === 'VOLUNTEER' || userData.skills)) {
+      try {
+        await this.createVolunteerProfile({
+          user_id: userRecord.id,
+          skills: userData.skills || userData.volunteerSkills || 'General Relief',
+          availability_status: 'AVAILABLE',
+          helped_count: 0
+        });
+      } catch (err) {
+        console.warn('Volunteer profile creation notice:', err.message);
+      }
+    }
+
+    return userRecord;
   },
 
   async updateUser(id, updates) {
@@ -99,7 +131,6 @@ const supabaseDb = {
   },
 
   async getCandidateDisastersForMerge(type) {
-    // 3 hours ago
     const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
     const q = `disasters?type=eq.${encodeURIComponent(type)}&status=in.(PENDING,VERIFIED_ACTIVE,IN_PROGRESS)&created_at=gte.${threeHoursAgo}&order=created_at.desc`;
     return await query(q);
@@ -143,7 +174,7 @@ const supabaseDb = {
     }));
   },
 
-  // --- DISASTER REPORTS ---
+  // --- REPORTS ---
   async createReport(reportData) {
     const inserted = await query('reports', {
       method: 'POST',
