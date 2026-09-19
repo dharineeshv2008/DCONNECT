@@ -306,8 +306,9 @@ module.exports = async (req, res) => {
       let dbStatus = statusInput.toUpperCase();
       if (statusInput === 'Open') dbStatus = 'VERIFIED_ACTIVE';
       if (statusInput === 'In Progress') dbStatus = 'IN_PROGRESS';
+      if (statusInput === 'Completed') dbStatus = 'RESOLVED';
       if (statusInput === 'Closed') dbStatus = 'CLOSED';
-      if (statusInput === 'Cancelled by Admin') dbStatus = 'CANCELLED';
+      if (statusInput === 'Cancelled by Admin' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'CANCELLED') dbStatus = 'CLOSED';
 
       const updated = await supabaseDb.updateDisaster(incidentId, {
         status: dbStatus,

@@ -1,16 +1,17 @@
 /**
  * Vercel Serverless Function: POST /api/incidents/update
- * Enforces strict enum validation and returns JSON response only
+ * Enforces PostgreSQL check constraint compliance for Supabase disasters table
  */
 
 const { supabaseDb } = require('../../supabaseClient');
 
-const ALLOWED_STATUSES = [
+// Allowed status values per Supabase 'disasters_status_check' constraint
+const ALLOWED_DB_STATUSES = [
   'VERIFIED_ACTIVE',
   'IN_PROGRESS',
+  'RESOLVED',
   'CLOSED',
-  'CANCELLED_BY_ADMIN',
-  'CANCELLED' // Legacy alias
+  'PENDING'
 ];
 
 function sendJson(res, statusCode, data) {
@@ -28,7 +29,7 @@ module.exports = async (req, res) => {
     return sendJson(res, 204, {});
   }
 
-  // Strict HTTP Method Validation: POST only (or PATCH/PUT)
+  // Method Validation: POST only
   if (req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'PUT') {
     return sendJson(res, 405, {
       success: false,
@@ -54,19 +55,22 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Map UI dropdown labels to canonical database enum values
+    // Map UI labels & legacy inputs to valid PostgreSQL check constraint values
     let dbStatus = rawStatus.toUpperCase();
     if (rawStatus === 'Open') dbStatus = 'VERIFIED_ACTIVE';
     if (rawStatus === 'In Progress') dbStatus = 'IN_PROGRESS';
+    if (rawStatus === 'Completed') dbStatus = 'RESOLVED';
     if (rawStatus === 'Closed') dbStatus = 'CLOSED';
-    if (rawStatus === 'Cancelled by Admin') dbStatus = 'CANCELLED_BY_ADMIN';
+    if (rawStatus === 'Cancelled by Admin' || rawStatus === 'CANCELLED_BY_ADMIN' || rawStatus === 'CANCELLED') {
+      dbStatus = 'CLOSED';
+    }
 
-    // Strict Enum Validation
-    if (!ALLOWED_STATUSES.includes(dbStatus)) {
+    // Strict validation against PostgreSQL disasters_status_check
+    if (!ALLOWED_DB_STATUSES.includes(dbStatus)) {
       return sendJson(res, 400, {
         success: false,
         error: 'Bad Request',
-        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, CLOSED, CANCELLED_BY_ADMIN.`
+        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED.`
       });
     }
 
