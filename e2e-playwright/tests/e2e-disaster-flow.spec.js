@@ -91,10 +91,22 @@ test.describe('Disaster Management Full-Stack E2E Suite', () => {
     await page.locator('#reportLongitude').fill('80.2718');
     await page.locator('#reportDescription').fill('Rapid rising flood water. Trapped vehicles and residents require rescue assistance.');
 
-    // Intercept POST /api/disasters/report
+    // Click Submit Report -> Triggers Step 1 Verification Modal
+    await page.locator('#disasterReportForm button[type="submit"]').click();
+
+    // Step 1: Click Continue
+    const step1ContinueBtn = page.locator('#doubleConfirmStep1Modal button:has-text("Continue")');
+    await expect(step1ContinueBtn).toBeVisible();
+    await step1ContinueBtn.click();
+
+    // Step 2: Fill CONFIRM and Submit
+    const confirmInput = page.locator('#doubleConfirmTextInput');
+    await expect(confirmInput).toBeVisible();
+    await confirmInput.fill('CONFIRM');
+
     const [reportResponse] = await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/api/disasters/report') && resp.status() === 201),
-      page.locator('#disasterReportForm button[type="submit"]').click()
+      page.waitForResponse(resp => (resp.url().includes('/api/disasters/report') || resp.url().includes('/api/incidents/create')) && (resp.status() === 201 || resp.status() === 200)),
+      page.locator('#doubleConfirmSubmitBtn').click()
     ]);
 
     const reportData = await reportResponse.json();

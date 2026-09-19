@@ -635,12 +635,12 @@
           <label>Task Instructions & Priority *</label>
           <textarea id="assignTaskDesc" rows="3" class="form-control" placeholder="Specific coordinates, safety precautions, contact persons..." required></textarea>
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Confirm Assignment</button>
+                <button type="submit" class="btn btn-primary btn-block">Confirm Assignment</button>
       </form>
     </div>
   </div>
 
-  <!-- Status Update Modal (Replaces text prompt with Dropdown Selector) -->
+  <!-- Status Update Modal (Clean Dropdown: VERIFIED_ACTIVE, IN_PROGRESS, CLOSED, CANCELLED_BY_ADMIN) -->
   <div id="statusUpdateModal" class="modal-overlay">
     <div class="modal-content">
       <div class="card-header">
@@ -655,20 +655,54 @@
           <input type="text" id="statusModalDisasterTitle" class="form-control" readonly style="background: #f8fafc; font-weight: 700;">
         </div>
         <div class="form-group">
-          <label>Select New Operational Status *</label>
-          <select id="statusModalSelect" class="form-control" required style="font-weight: 700;">
-            <option value="IN_PROGRESS">🟡 In Progress (Rescue & relief operations active)</option>
-            <option value="Open">🟢 Open / Verified Active</option>
-            <option value="COMPLETED">✅ Completed / Resolved</option>
-            <option value="Closed">📁 Closed / Archived</option>
-            <option value="Cancelled by Admin">⚪ Cancelled by Admin (False alarm / Cancelled)</option>
-            <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed disaster)</option>
-            <option value="RESOLVED">✅ RESOLVED (Situation stabilized)</option>
-            <option value="CLOSED">📁 CLOSED (Incident archived)</option>
-            <option value="CANCELLED">⚪ CANCELLED (Operation cancelled)</option>
+          <label>Select Operational Status *</label>
+          <select id="statusModalSelect" class="form-control" required style="font-weight: 700; padding: 10px; cursor: pointer;">
+            <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed Disaster)</option>
+            <option value="IN_PROGRESS">🟡 IN_PROGRESS (Relief Operations Active)</option>
+            <option value="CLOSED">📁 CLOSED (Incident Resolved & Archived)</option>
+            <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN (Cancelled / False Alarm)</option>
           </select>
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Apply Status Change</button>
+        <button type="submit" id="statusUpdateSubmitBtn" class="btn btn-primary btn-block">Update Status</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Double Verification: Step 1 Modal -->
+  <div id="doubleConfirmStep1Modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title" id="doubleConfirmStep1Title">Confirm Action</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('doubleConfirmStep1Modal')">✕</button>
+      </div>
+      <p id="doubleConfirmStep1Message" style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        This is a sensitive action. Are you sure?
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('doubleConfirmStep1Modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="handleDoubleConfirmStep1Continue()">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Double Verification: Step 2 Modal (Type CONFIRM) -->
+  <div id="doubleConfirmStep2Modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">Security Verification</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('doubleConfirmStep2Modal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 12px 0 16px 0; font-size: 0.9rem;">
+        Type <strong>CONFIRM</strong> in uppercase below to authorize this operation:
+      </p>
+      <form onsubmit="handleDoubleConfirmStep2Submit(event)">
+        <div class="form-group">
+          <input type="text" id="doubleConfirmTextInput" class="form-control" placeholder="Type CONFIRM" required autocomplete="off" style="font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('doubleConfirmStep2Modal')">Cancel</button>
+          <button type="submit" id="doubleConfirmSubmitBtn" class="btn btn-danger" disabled>Authorize & Execute</button>
+        </div>
       </form>
     </div>
   </div>

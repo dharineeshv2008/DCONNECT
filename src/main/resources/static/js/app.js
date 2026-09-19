@@ -589,13 +589,65 @@ async function checkApprovalStatus() {
 }
 
 // ==============================================================================
+// 6.5 DOUBLE VERIFICATION SYSTEM (SENSITIVE ACTION STEP 1 & STEP 2)
+// ==============================================================================
+
+let pendingDoubleConfirmCallback = null;
+
+function requestDoubleVerification(title, message, onVerifiedCallback) {
+  pendingDoubleConfirmCallback = onVerifiedCallback;
+
+  const titleEl = document.getElementById('doubleConfirmStep1Title');
+  const msgEl = document.getElementById('doubleConfirmStep1Message');
+  if (titleEl) titleEl.textContent = title || 'Confirm Action';
+  if (msgEl) msgEl.textContent = message || 'This is a sensitive action. Are you sure?';
+
+  openModal('doubleConfirmStep1Modal');
+}
+
+function handleDoubleConfirmStep1Continue() {
+  closeModal('doubleConfirmStep1Modal');
+
+  const textInput = document.getElementById('doubleConfirmTextInput');
+  const submitBtn = document.getElementById('doubleConfirmSubmitBtn');
+  if (textInput) textInput.value = '';
+  if (submitBtn) submitBtn.disabled = true;
+
+  if (textInput && !textInput.dataset.bound) {
+    textInput.dataset.bound = 'true';
+    textInput.addEventListener('input', (e) => {
+      const val = (e.target.value || '').trim();
+      const btn = document.getElementById('doubleConfirmSubmitBtn');
+      if (btn) btn.disabled = (val !== 'CONFIRM');
+    });
+  }
+
+  openModal('doubleConfirmStep2Modal');
+}
+
+function handleDoubleConfirmStep2Submit(e) {
+  e.preventDefault();
+  const textVal = (document.getElementById('doubleConfirmTextInput')?.value || '').trim();
+  if (textVal !== 'CONFIRM') {
+    showToast('Verification Required', 'Please type CONFIRM to execute action.', 'warning');
+    return;
+  }
+
+  closeModal('doubleConfirmStep2Modal');
+
+  if (typeof pendingDoubleConfirmCallback === 'function') {
+    const callback = pendingDoubleConfirmCallback;
+    pendingDoubleConfirmCallback = null;
+    callback();
+  }
+}
+
+// ==============================================================================
 // 7. DISASTER REPORTING & HAVERSINE DEDUPLICATION
 // ==============================================================================
 
 async function handleDisasterSubmit(e) {
   e.preventDefault();
-  const alertBox = document.getElementById('reportAlertBox');
-  alertBox.innerHTML = '';
 
   const payload = {
     type: document.getElementById('reportDisasterType').value,
@@ -610,30 +662,45 @@ async function handleDisasterSubmit(e) {
     reporterPhone: currentUser ? currentUser.phone : 'N/A'
   };
 
+  requestDoubleVerification(
+    'Report Emergency Incident',
+    `You are submitting an emergency ${payload.type} report for '${payload.locationName}'. Are you sure?`,
+    () => executeDisasterSubmit(payload)
+  );
+}
+
+async function executeDisasterSubmit(payload) {
+  const alertBox = document.getElementById('reportAlertBox');
+  if (alertBox) alertBox.innerHTML = '';
+
   try {
-    const data = await fetchAPI('/disasters/report', {
+    const data = await fetchAPI('/incidents/create', {
       method: 'POST',
       body: payload
     });
 
     const disaster = data.data;
     if (disaster.wasMerged) {
-      alertBox.innerHTML = `
-        <div class="alert alert-info">
-          🔄 <strong>AUTOMATICALLY MERGED (Haversine 10km Rule):</strong><br>
-          ${data.message}<br>
-          Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>) now has <strong>${disaster.reportCount} reports</strong>.
-        </div>
-      `;
+      if (alertBox) {
+        alertBox.innerHTML = `
+          <div class="alert alert-info">
+            🔄 <strong>AUTOMATICALLY MERGED (Haversine 10km Rule):</strong><br>
+            ${data.message}<br>
+            Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>) now has <strong>${disaster.reportCount} reports</strong>.
+          </div>
+        `;
+      }
       showToast('Incident Merged', `Deduplicated into Incident #${disaster.id} (${disaster.reportCount} reports)`, 'info');
     } else {
-      alertBox.innerHTML = `
-        <div class="alert alert-success">
-          ✅ <strong>NEW DISASTER CREATED:</strong><br>
-          ${data.message}<br>
-          Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>).
-        </div>
-      `;
+      if (alertBox) {
+        alertBox.innerHTML = `
+          <div class="alert alert-success">
+            ✅ <strong>NEW DISASTER CREATED:</strong><br>
+            ${data.message}<br>
+            Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>).
+          </div>
+        `;
+      }
       showToast('Incident Reported', `Dispatched #${disaster.id} to emergency pipeline.`, 'success');
     }
 
@@ -641,8 +708,7 @@ async function handleDisasterSubmit(e) {
     populateFormCoords(currentCoords.latitude, currentCoords.longitude);
     loadDisasters();
   } catch (err) {
-    handleApiError(err, 'Failed to submit disaster report.');
-    alertBox.innerHTML = `<div class="alert alert-danger">${err.message || 'Submission error.'}</div>`;
+    showToast('Submission Failed', err.message || 'Update failed. Try again.', 'error');
   }
 }
 
@@ -722,20 +788,33 @@ function openStatusUpdateModal(disasterId, title, currentStatus) {
 
 async function handleStatusUpdateSubmit(e) {
   e.preventDefault();
-  const disasterId = document.getElementById('statusModalDisasterId').value;
+  const submitBtn = document.getElementById('statusUpdateSubmitBtn');
+  const disasterId = parseInt(document.getElementById('statusModalDisasterId').value);
   const newStatus = document.getElementById('statusModalSelect').value;
 
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Updating...';
+  }
+
   try {
-    const data = await fetchAPI(`/disasters/${disasterId}/status`, {
-      method: 'PATCH',
-      body: { status: newStatus }
+    const data = await fetchAPI('/incidents/update', {
+      method: 'POST',
+      body: { incidentId: disasterId, status: newStatus }
     });
 
     closeModal('statusUpdateModal');
-    showToast('Status Updated', `Incident #${disasterId} changed to ${newStatus}`, 'success');
+    showToast('Status Updated', `Incident #${disasterId} status changed to ${newStatus}`, 'success');
+
+    // Rule 4: Instant UI Update & Refetch
     loadDisasters();
   } catch (err) {
-    handleApiError(err, 'Failed to update disaster status.');
+    showToast('Update Failed', err.message || 'Update failed. Try again.', 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Update Status';
+    }
   }
 }
 
@@ -864,6 +943,14 @@ async function handleAssignTaskSubmit(e) {
     assignedById: currentUser ? currentUser.id : null
   };
 
+  requestDoubleVerification(
+    'Dispatch Rescue Mission',
+    `You are dispatching task '${payload.taskTitle}' to a field volunteer. Are you sure?`,
+    () => executeAssignTaskSubmit(payload)
+  );
+}
+
+async function executeAssignTaskSubmit(payload) {
   try {
     await fetchAPI('/volunteers/assignments', {
       method: 'POST',
@@ -874,7 +961,7 @@ async function handleAssignTaskSubmit(e) {
     closeModal('taskAssignModal');
     loadVolunteerAssignments();
   } catch (err) {
-    handleApiError(err);
+    showToast('Dispatch Failed', err.message || 'Update failed. Try again.', 'error');
   }
 }
 

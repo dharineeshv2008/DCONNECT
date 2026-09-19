@@ -1,8 +1,17 @@
 /**
- * Vercel Serverless Function: POST/PATCH /api/incidents/update
+ * Vercel Serverless Function: POST /api/incidents/update
+ * Enforces strict enum validation and returns JSON response only
  */
 
 const { supabaseDb } = require('../../supabaseClient');
+
+const ALLOWED_STATUSES = [
+  'VERIFIED_ACTIVE',
+  'IN_PROGRESS',
+  'CLOSED',
+  'CANCELLED_BY_ADMIN',
+  'CANCELLED' // Legacy alias
+];
 
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
@@ -19,11 +28,12 @@ module.exports = async (req, res) => {
     return sendJson(res, 204, {});
   }
 
+  // Strict HTTP Method Validation: POST only (or PATCH/PUT)
   if (req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'PUT') {
     return sendJson(res, 405, {
       success: false,
       error: 'Method Not Allowed',
-      message: `HTTP method ${req.method} is not allowed on /api/incidents/update. Use POST, PATCH, or PUT.`
+      message: `HTTP method ${req.method} is not allowed on /api/incidents/update. Use POST.`
     });
   }
 
@@ -34,7 +44,7 @@ module.exports = async (req, res) => {
     }
 
     const incidentId = parseInt(body.incidentId || body.disasterId || body.id);
-    let statusInput = (body.status || 'IN_PROGRESS').trim();
+    let rawStatus = (body.status || '').trim();
 
     if (!incidentId || isNaN(incidentId)) {
       return sendJson(res, 400, {
@@ -44,12 +54,21 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Map dropdown UI labels to canonical backend database statuses if needed
-    let dbStatus = statusInput.toUpperCase();
-    if (statusInput === 'Open') dbStatus = 'VERIFIED_ACTIVE';
-    if (statusInput === 'In Progress') dbStatus = 'IN_PROGRESS';
-    if (statusInput === 'Closed') dbStatus = 'CLOSED';
-    if (statusInput === 'Cancelled by Admin') dbStatus = 'CANCELLED';
+    // Map UI dropdown labels to canonical database enum values
+    let dbStatus = rawStatus.toUpperCase();
+    if (rawStatus === 'Open') dbStatus = 'VERIFIED_ACTIVE';
+    if (rawStatus === 'In Progress') dbStatus = 'IN_PROGRESS';
+    if (rawStatus === 'Closed') dbStatus = 'CLOSED';
+    if (rawStatus === 'Cancelled by Admin') dbStatus = 'CANCELLED_BY_ADMIN';
+
+    // Strict Enum Validation
+    if (!ALLOWED_STATUSES.includes(dbStatus)) {
+      return sendJson(res, 400, {
+        success: false,
+        error: 'Bad Request',
+        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, CLOSED, CANCELLED_BY_ADMIN.`
+      });
+    }
 
     const updated = await supabaseDb.updateDisaster(incidentId, {
       status: dbStatus,
@@ -67,7 +86,7 @@ module.exports = async (req, res) => {
     return sendJson(res, 500, {
       success: false,
       error: 'Internal Server Error',
-      message: err.message || 'Failed to update incident.'
+      message: err.message || 'Failed to update incident in Supabase.'
     });
   }
 };
