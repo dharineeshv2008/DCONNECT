@@ -1,0 +1,19 @@
+# Compiled class files & build directories
+target/
+*.class
+
+# Node / dependencies
+node_modules/
+
+# Playwright artifacts
+.playwright-mcp/
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+*.log
+
+# Sensitive environment variables (use .env.example instead)
+.env

@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D-Connect | Disaster Management Coordination App</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="shortcut icon" type="image/png" href="assets/logo.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- No Internet State Banner -->
+  <div id="offlineBanner">
+    ⚠️ Network connection lost! Working in offline mode. Reconnecting...
+  </div>
+
+  <!-- ==============================================================================
+       SPLIT SCREEN LANDING & AUTHENTICATION (Matching Reference UI)
+       ============================================================================== -->
+  <div id="authLandingScreen" class="auth-hero-wrapper">
+    
+    <!-- LEFT SIDE: Hero Visuals & Animated Helicopter -->
+    <div class="auth-hero-left">
+      <div class="hero-backdrop-scenery"></div>
+      
+      <!-- Animated Rescue Helicopter Stage -->
+      <div class="helicopter-sky-stage">
+        <div class="rescue-helicopter">
+          <!-- Helicopter SVG Graphic with animated spinning rotors -->
+          <svg viewBox="0 0 180 90" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Main Rotor Blades -->
+            <g class="heli-main-rotor">
+              <line x1="10" y1="12" x2="160" y2="12" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+              <line x1="30" y1="12" x2="140" y2="12" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+              <circle cx="85" cy="12" r="4" fill="#0f172a" />
+            </g>
+            <rect x="83" y="12" width="4" height="10" fill="#334155" />
+
+            <!-- Helicopter Body -->
+            <path d="M45,46 Q50,22 90,22 L120,24 Q145,26 150,45 Q152,60 125,62 L60,62 Q45,60 45,46 Z" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+            <!-- Red Emergency Stripe -->
+            <path d="M50,46 Q70,40 120,40 L145,46 L140,52 L55,52 Z" fill="#dc2626" />
+            <!-- Cockpit Windows -->
+            <path d="M115,28 Q138,30 142,44 L115,44 Z" fill="#38bdf8" opacity="0.85" stroke="#0f172a" stroke-width="1.5"/>
+            <path d="M85,26 L110,26 L110,44 L85,44 Z" fill="#0284c7" opacity="0.8" />
+
+            <!-- Tail Boom & Fin -->
+            <path d="M45,38 L15,42 L12,30 L6,30 L10,50 L18,46 L45,48 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>
+            <!-- Tail Rotor -->
+            <g class="heli-tail-rotor">
+              <line x1="5" y1="44" x2="25" y2="44" stroke="#ffffff" stroke-width="2.5" />
+              <circle cx="15" cy="44" r="2.5" fill="#dc2626" />
+            </g>
+
+            <!-- Landing Skids -->
+            <line x1="60" y1="62" x2="55" y2="72" stroke="#334155" stroke-width="2.5" />
+            <line x1="115" y1="62" x2="110" y2="72" stroke="#334155" stroke-width="2.5" />
+            <line x1="45" y1="72" x2="135" y2="72" stroke="#0f172a" stroke-width="3.5" stroke-linecap="round"/>
+          </svg>
+
+          <!-- Rescue Winch Wire & Hook -->
+          <div class="heli-rescue-wire">
+            <div class="heli-rescue-hook"></div>
+          </div>
+
+          <!-- Dynamic Searchlight Beam -->
+          <div class="heli-searchlight"></div>
+        </div>
+      </div>
+
+      <!-- Hero Header & Branding -->
+      <div>
+        <div class="hero-header-tag">PEOPLE • RESPONSE • RESILIENCE</div>
+        <h1 class="hero-main-title">
+          Disaster<br>
+          <span>Management</span><br>
+          Coordination App
+        </h1>
+        <div class="hero-sub-title">
+          Report &bull; Coordinate &bull; Respond &bull; Save Lives
+        </div>
+        <div class="hero-quote">
+          “Stronger Communities, Safer Tomorrows”
+        </div>
+      </div>
+
+      <!-- 4 Strategic Feature Cards -->
+      <div class="hero-features-grid">
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-blue">📍</div>
+          <div class="hero-feat-info">
+            <h4>Smart Reporting</h4>
+            <p>Report disasters with browser GPS location (Lat/Long) and Haversine deduplication.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-green">👥</div>
+          <div class="hero-feat-info">
+            <h4>Volunteer Support</h4>
+            <p>Join missions, accept tasks, track relief progress, and make an impact.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-red">🛡️</div>
+          <div class="hero-feat-info">
+            <h4>Resource Coordination</h4>
+            <p>Share and request essential food, water, medical supplies, and equipment.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-purple">📊</div>
+          <div class="hero-feat-info">
+            <h4>Real-time Updates</h4>
+            <p>Stay informed with live incident pipelines, discussion feeds, and alerts.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Footer Badges -->
+      <div class="hero-footer-badges">
+        <span>👥 People Together</span>
+        <span>🍃 Safer Communities</span>
+        <span>🤍 Stronger Tomorrow</span>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE: D-Connect Login & Role Selector Card -->
+    <div class="auth-hero-right">
+      <div class="auth-card-container">
+        <div class="auth-card-top-decoration"></div>
+
+        <!-- Brand Logo Header -->
+        <div class="auth-card-brand">
+          <img src="assets/logo.png" alt="D-Connect Logo" class="auth-brand-logo">
+          <h2 class="auth-brand-title">D-Connect</h2>
+          <p class="auth-brand-tagline">Disaster Management Coordination App</p>
+        </div>
+
+        <!-- Role Selector Tabs -->
+        <div class="role-tabs-bar" id="loginRoleTabs">
+          <button type="button" class="role-tab-item active" onclick="selectLoginRole('USER', this)">
+            <span class="role-tab-icon">👤</span>
+            <span>User</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('VOLUNTEER', this)">
+            <span class="role-tab-icon">🦺</span>
+            <span>Volunteer</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('NGO', this)">
+            <span class="role-tab-icon">👥</span>
+            <span>NGO</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('GOVERNMENT_AGENCY', this)">
+            <span class="role-tab-icon">🏛️</span>
+            <span>Government</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('ADMIN', this)">
+            <span class="role-tab-icon">⚙️</span>
+            <span>Admin</span>
+          </button>
+        </div>
+
+        <div id="landingLoginAlert"></div>
+
+        <!-- Phone + Password Manual Login Form (Strict No-Autofill) -->
+        <form id="landingLoginForm" autocomplete="off" onsubmit="handleLandingLogin(event)">
+          <div class="auth-input-group">
+            <span class="input-icon">📞</span>
+            <input 
+              type="tel" 
+              id="landingLoginPhone" 
+              class="auth-input-control" 
+              placeholder="Enter your phone number" 
+              autocomplete="off" 
+              inputmode="numeric" 
+              maxlength="10" 
+              pattern="[0-9]{10}"
+              oninput="handleLoginInputChange()"
+              required>
+          </div>
+
+          <div class="auth-input-group">
+            <span class="input-icon">🔒</span>
+            <input 
+              type="password" 
+              id="landingLoginPassword" 
+              class="auth-input-control" 
+              placeholder="Enter your password" 
+              autocomplete="new-password"
+              oninput="handleLoginInputChange()"
+              required>
+          </div>
+
+          <div id="loginInputHelper" class="input-hint-msg" style="display: none;"></div>
+
+          <button type="submit" id="landingLoginBtn" class="btn-auth-submit" disabled>
+            <span id="loginBtnSpinner" class="spinner-icon" style="display: none;"></span>
+            <span id="loginBtnText">Login ➔</span>
+          </button>
+        </form>
+
+        <div class="auth-card-footer">
+          New to D-Connect? <a href="#" onclick="openRegisterModal()">Register Now</a>
+        </div>
+
+        <div class="auth-bottom-tagline">
+          DISASTER RESPONSE &bull; HUMAN SUPPORT &bull; A SAFER WORLD
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==============================================================================
+       MAIN COORDINATION DASHBOARD APP (Rendered upon Auth)
+       ============================================================================== -->
+  <div id="mainDashboardApp" style="display: none;">
+
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="logo-section" onclick="switchTab('feedTab')">
+        <img src="assets/logo.png" alt="Logo" class="header-brand-img">
+        <div class="logo-title">
+          <h1>D-Connect Coordination</h1>
+          <p>Real-time Emergency Pipeline & Response Network</p>
+        </div>
+      </div>
+      
+      <div class="user-status-bar">
+        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px;">
+          <span id="userBadgeRole" class="badge badge-admin">ADMIN</span>
+          <span id="userNameDisplay" style="font-weight: 700; font-size: 0.95rem; color: var(--primary-dark);">Super Admin</span>
+          <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav" id="appNav">
+      <button class="nav-btn active" onclick="switchTab('feedTab')">📡 Live Disasters</button>
+      <button class="nav-btn" onclick="switchTab('reportTab')">⚠️ Report Incident</button>
+      <button class="nav-btn" onclick="switchTab('volunteerTab')">🤝 Volunteer Missions</button>
+      <button class="nav-btn" onclick="switchTab('resourceTab')">📦 Emergency Resources</button>
+      <button class="nav-btn" id="adminNavBtn" style="display: none;" onclick="switchTab('adminTab')">🛡️ Admin Command Center</button>
+    </nav>
+
+    <!-- Main View Container -->
+    <main class="main-container">
+
+      <!-- Approval Pending Page View (403 for unapproved NGO/Gov) -->
+      <div id="approvalPendingView" class="error-page-container">
+        <div class="error-icon">⏳</div>
+        <h2 class="error-title">Account Approval Pending</h2>
+        <p class="error-text">
+          Your NGO / Government Agency account has been submitted. For public safety and verified coordination, administrative approval is required before you can publish reports or manage resources.
+        </p>
+        <div class="alert alert-warning" id="pendingOrgDetails">
+          Organization: <strong id="pendingOrgName">Red Cross</strong> | Status: <strong>PENDING_APPROVAL</strong>
+        </div>
+        <button class="btn btn-primary" onclick="checkApprovalStatus()">Refresh Approval Status</button>
+        <button class="btn btn-outline" style="margin-left: 10px;" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Access Denied Page View (403) -->
+      <div id="accessDeniedView" class="error-page-container">
+        <div class="error-icon">🚫</div>
+        <h2 class="error-title">403 - Access Denied</h2>
+        <p class="error-text">You do not have administrative permission to view or execute actions in this section.</p>
+        <button class="btn btn-primary" onclick="switchTab('feedTab')">Return to Disaster Feed</button>
+      </div>
+
+      <!-- 404 Page Not Found View -->
+      <div id="notFoundView" class="error-page-container">
+        <div class="error-icon">🔍</div>
+        <h2 class="error-title">404 - Incident Not Found</h2>
+        <p class="error-text">The disaster incident or coordination resource you requested does not exist or has been archived.</p>
+        <button class="btn btn-primary" onclick="switchTab('feedTab')">Back to Live Feed</button>
+      </div>
+
+      <!-- 500 Server Error View -->
+      <div id="serverErrorView" class="error-page-container">
+        <div class="error-icon">💥</div>
+        <h2 class="error-title">500 - System Error</h2>
+        <p class="error-text">Something went wrong communicating with the backend server. Please try again shortly.</p>
+        <button class="btn btn-primary" onclick="reloadCurrentData()">Retry Request</button>
+      </div>
+
+      <!-- TAB 1: Live Disasters Feed -->
+      <section id="feedTab" class="tab-pane active">
+        <div class="geo-capture-box">
+          <div class="geo-info">
+            📍 <strong>Browser GPS Geolocation:</strong> <span id="geoStatusText">Detecting live coordinates...</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="captureBrowserLocation()">Refresh GPS</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🚨 Active Incidents & Disaster Pipeline</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <select id="feedTypeFilter" class="form-control" style="width: 160px; padding: 6px;" onchange="loadDisasters()">
+                <option value="">All Types</option>
+                <option value="FLOOD">Flood</option>
+                <option value="EARTHQUAKE">Earthquake</option>
+                <option value="FIRE">Fire</option>
+                <option value="CYCLONE">Cyclone</option>
+                <option value="LANDSLIDE">Landslide</option>
+                <option value="BUILDING_COLLAPSE">Collapse</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <select id="feedStatusFilter" class="form-control" style="width: 160px; padding: 6px;" onchange="loadDisasters()">
+                <option value="">All Statuses</option>
+                <option value="VERIFIED_ACTIVE" selected>Verified Active</option>
+                <option value="PENDING">Pending Verification</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="CLOSED">Closed</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="disasterFeedList">
+            <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading incident reports...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Report Incident -->
+      <section id="reportTab" class="tab-pane">
+        <div class="card" style="max-width: 760px; margin: 0 auto;">
+          <div class="card-header">
+            <div class="card-title">📢 Submit Disaster Incident Report</div>
+          </div>
+
+          <div class="alert alert-info">
+            💡 <strong>Haversine Merge Engine Active:</strong> Reports of the same disaster type within <strong>10 km</strong> and <strong>3 hours</strong> are automatically deduplicated and merged into the active incident.
+          </div>
+
+          <div id="reportAlertBox"></div>
+
+          <form id="disasterReportForm" onsubmit="handleDisasterSubmit(event)">
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Disaster Type *</label>
+                <select id="reportDisasterType" class="form-control" required>
+                  <option value="FLOOD">🌊 Flood / Waterlogging</option>
+                  <option value="EARTHQUAKE">🏚️ Earthquake / Tremors</option>
+                  <option value="FIRE">🔥 Fire Outbreak</option>
+                  <option value="CYCLONE">🌪️ Cyclone / Severe Storm</option>
+                  <option value="LANDSLIDE">⛰️ Landslide</option>
+                  <option value="BUILDING_COLLAPSE">🏢 Building / Bridge Collapse</option>
+                  <option value="OTHER">⚠️ Other Emergency</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Severity Level *</label>
+                <select id="reportSeverity" class="form-control" required>
+                  <option value="LOW">🟢 Low (Minor disruption)</option>
+                  <option value="MEDIUM" selected>🟡 Medium (Assistance needed)</option>
+                  <option value="HIGH">🟠 High (Urgent rescue / evacuation)</option>
+                  <option value="CRITICAL">🔴 Critical (Immediate life threat)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Incident Title *</label>
+              <input type="text" id="reportTitle" class="form-control" placeholder="e.g. Flash Flooding at North Bridge" required>
+            </div>
+
+            <div class="form-group">
+              <label>Incident Location Landmark / Street *</label>
+              <input type="text" id="reportLocationName" class="form-control" placeholder="e.g. Near Gandhi Circle, Sector 4" required>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Latitude (Browser GPS) *</label>
+                <input type="number" step="any" id="reportLatitude" class="form-control" placeholder="e.g. 13.0827" required>
+              </div>
+              <div class="form-group">
+                <label>Longitude (Browser GPS) *</label>
+                <input type="number" step="any" id="reportLongitude" class="form-control" placeholder="e.g. 80.2707" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Situation Description *</label>
+              <textarea id="reportDescription" rows="4" class="form-control" placeholder="Describe water level, trapped persons, blocked roads, medical urgency..." required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" style="padding: 13px; font-size: 1rem;">
+              🚨 Dispatch Incident Report
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 3: Volunteer Missions -->
+      <section id="volunteerTab" class="tab-pane">
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🎯 Assigned Rescue & Relief Missions</div>
+            </div>
+            <div id="volunteerAssignmentsList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading missions...</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">👷 Registered Volunteers Directory</div>
+            </div>
+            <div id="volunteersDirectoryList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading volunteers...</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB 4: Emergency Resources -->
+      <section id="resourceTab" class="tab-pane">
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📦 Provide Emergency Resources</div>
+            </div>
+            <form id="resourceForm" onsubmit="handleResourceSubmit(event)">
+              <div class="form-group">
+                <label>Resource Category *</label>
+                <select id="resType" class="form-control" required>
+                  <option value="FOOD">🍞 Food & Rations</option>
+                  <option value="WATER">💧 Clean Drinking Water</option>
+                  <option value="MEDICAL">💊 Medical & First Aid Kits</option>
+                  <option value="SHELTER">⛺ Tarpaulins & Tents</option>
+                  <option value="RESCUE_EQUIPMENT">🛟 Boats & Rescue Gear</option>
+                  <option value="TRANSPORT">🚚 Transport Vehicles</option>
+                  <option value="CLOTHING">👕 Blankets & Warm Clothes</option>
+                  <option value="OTHER">📦 Other Supplies</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Item Name / Description *</label>
+                <input type="text" id="resName" class="form-control" placeholder="e.g. Ready-to-eat Meal Packets" required>
+              </div>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Quantity *</label>
+                  <input type="number" id="resQty" class="form-control" min="1" placeholder="e.g. 500" required>
+                </div>
+                <div class="form-group">
+                  <label>Unit of Measure *</label>
+                  <input type="text" id="resUnit" class="form-control" placeholder="e.g. packets / boxes / litres" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Contact Phone for Pickup</label>
+                <input type="text" id="resPhone" class="form-control" placeholder="Leave empty to use account phone">
+              </div>
+
+              <button type="submit" class="btn btn-secondary btn-block">Add to Supply Pool</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📊 Available Supplies in Emergency Pool</div>
+            </div>
+            <div id="resourcePoolList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading inventory...</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB 5: Admin Command Center -->
+      <section id="adminTab" class="tab-pane">
+        
+        <div class="grid-4" style="margin-bottom: 22px;">
+          <div class="kpi-card">
+            <div class="kpi-label">Active Disasters</div>
+            <div class="kpi-value" id="kpiActiveDisasters">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Reports Merged</div>
+            <div class="kpi-value" id="kpiReportsAggregated">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active Volunteers</div>
+            <div class="kpi-value" id="kpiActiveVolunteers">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Pending Verifications</div>
+            <div class="kpi-value" id="kpiPendingApprovals">0</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🏢 Pending Organization Approvals</div>
+            </div>
+            <div id="adminPendingUsersList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending organizations.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚠️ Pending Citizen Disaster Reports</div>
+            </div>
+            <div id="adminPendingDisastersList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Register Modal -->
+  <div id="registerModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title">📝 Register New Account</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('registerModal')">✕</button>
+      </div>
+
+      <div id="registerAlertBox"></div>
+
+      <form onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="regName" class="form-control" placeholder="e.g. Rahul Sharma" required>
+        </div>
+        <div class="form-group">
+          <label>Phone Number *</label>
+          <input type="text" id="regPhone" class="form-control" placeholder="10-15 digit phone number" required>
+        </div>
+        <div class="form-group">
+          <label>Password *</label>
+          <input type="password" id="regPassword" class="form-control" placeholder="Minimum 6 characters" required>
+        </div>
+        <div class="form-group">
+          <label>Account Role *</label>
+          <select id="regRole" class="form-control" onchange="toggleOrgFields()" required>
+            <option value="USER">User (General Public - Direct Access)</option>
+            <option value="VOLUNTEER">Volunteer (Direct Access)</option>
+            <option value="NGO">NGO Organization (Requires Admin Approval)</option>
+            <option value="GOVERNMENT_AGENCY">Government Agency (Requires Admin Approval)</option>
+          </select>
+        </div>
+
+        <div id="orgFields" style="display: none;">
+          <div class="form-group">
+            <label>Organization / Agency Name *</label>
+            <input type="text" id="regOrgName" class="form-control" placeholder="e.g. Red Cross Disaster Unit">
+          </div>
+          <div class="form-group">
+            <label>Registration / Badge Number *</label>
+            <input type="text" id="regOrgRegNo" class="form-control" placeholder="e.g. NGO-IND-8839">
+          </div>
+        </div>
+
+        <div id="volunteerFields" style="display: none;">
+          <div class="form-group">
+            <label>Volunteer Skills / Expertise</label>
+            <input type="text" id="regSkills" class="form-control" placeholder="e.g. First Aid, Swimming, Boat Driving, Medical">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Complete Registration</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Discussion & Comments Modal -->
+  <div id="discussionModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title" id="discussionModalTitle">💬 Disaster Coordination Discussion</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('discussionModal')">✕</button>
+      </div>
+
+      <div id="commentsContainer" style="max-height: 320px; overflow-y: auto; margin-bottom: 16px;"></div>
+
+      <form onsubmit="handlePostComment(event)">
+        <div class="form-group">
+          <textarea id="newCommentText" rows="3" class="form-control" placeholder="Add ground update, request resources, or coordinate rescue..." required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Post Message</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Task Assign Modal -->
+  <div id="taskAssignModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title">🎯 Assign Rescue Mission to Volunteer</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('taskAssignModal')">✕</button>
+      </div>
+
+      <form onsubmit="handleAssignTaskSubmit(event)">
+        <input type="hidden" id="assignDisasterId">
+        <div class="form-group">
+          <label>Select Volunteer *</label>
+          <select id="assignVolunteerSelect" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label>Task Title *</label>
+          <input type="text" id="assignTaskTitle" class="form-control" placeholder="e.g. Distribute Drinking Water Packs" required>
+        </div>
+        <div class="form-group">
+          <label>Task Instructions & Priority *</label>
+          <textarea id="assignTaskDesc" rows="3" class="form-control" placeholder="Specific coordinates, safety precautions, contact persons..." required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Confirm Assignment</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

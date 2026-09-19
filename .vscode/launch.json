@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "DisasterCoordinationApplication",
+            "request": "launch",
+            "mainClass": "com.disaster.coord.DisasterCoordinationApplication",
+            "projectName": "disaster-management-coordination",
+            "env": {
+                "DATABASE_PASSWORD": "your_actual_supabase_postgres_password"
+            }
+        }
+    ]
+}

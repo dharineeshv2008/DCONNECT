@@ -1,0 +1,55 @@
+server:
+  port: ${PORT:8000}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+spring:
+  application:
+    name: disaster-management-coordination
+
+  # Supabase PostgreSQL configuration with local fallback
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://db.qpxnsxphwufrnfejphat.supabase.co:5432/postgres?sslmode=require}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      max-lifetime: 600000
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    open-in-view: false
+
+  sql:
+    init:
+      mode: always
+
+logging:
+  level:
+    root: INFO
+    com.disaster.coord: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+
+# Disaster App Specific Configuration
+disaster-app:
+  supabase:
+    url: https://qpxnsxphwufrnfejphat.supabase.co
+    anon-key: sb_publishable_-czHfII217kgXwBOhtB9kw_TA964s7l
+  merge:
+    max-distance-km: 10.0
+    time-window-hours: 3
