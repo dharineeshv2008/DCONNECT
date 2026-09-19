@@ -31,8 +31,16 @@ function sendJson(res, statusCode, data) {
 }
 
 module.exports = async (req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  let pathname = parsedUrl.pathname;
+  const rawUrl = req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.headers['x-original-url'] || req.url;
+  const parsedUrl = url.parse(rawUrl, true);
+  let pathname = parsedUrl.pathname || '/api';
+
+  if (pathname.endsWith('/index.js')) {
+    pathname = pathname.replace('/index.js', '');
+  }
+  if (!pathname.startsWith('/api')) {
+    pathname = '/api' + pathname;
+  }
   const method = req.method;
 
   if (method === 'OPTIONS') {
@@ -43,11 +51,6 @@ module.exports = async (req, res) => {
     });
     res.end();
     return;
-  }
-
-  // Ensure /api prefix
-  if (!pathname.startsWith('/api')) {
-    pathname = '/api' + pathname;
   }
 
   // Parse body helper
