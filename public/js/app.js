@@ -1086,8 +1086,14 @@ async function handlePostComment(e) {
 }
 
 // ==============================================================================
-// 11. ADMIN COMMAND CENTER & ANALYTICS
+// 11. ADMIN COMMAND CENTER & REDESIGNED TABLE VIEW
 // ==============================================================================
+
+let adminReportsList = [];
+let adminCurrentPage = 1;
+const adminPageSize = 10;
+let adminSearchDebounceTimer = null;
+let pendingDeleteIncidentId = null;
 
 async function loadAdminData() {
   if (!currentUser || currentUser.role !== 'ADMIN') {
@@ -1096,6 +1102,7 @@ async function loadAdminData() {
   }
 
   loadAdminAnalytics();
+  loadAdminReportsTable();
   loadAdminPendingUsers();
   loadAdminPendingDisasters();
 }
@@ -1110,6 +1117,184 @@ async function loadAdminAnalytics() {
     document.getElementById('kpiPendingApprovals').textContent = kpi.pendingUserApprovals + kpi.pendingDisasters;
   } catch (err) {
     console.error(err);
+  }
+}
+
+async function loadAdminReportsTable() {
+  try {
+    const data = await fetchAPI('/incidents/list');
+    adminReportsList = data.data || [];
+    renderAdminReportsTable();
+  } catch (err) {
+    showToast('Failed to load reports', err.message || 'Error fetching incidents from database.', 'error');
+  }
+}
+
+function onAdminSearchInput() {
+  if (adminSearchDebounceTimer) clearTimeout(adminSearchDebounceTimer);
+  adminSearchDebounceTimer = setTimeout(() => {
+    adminCurrentPage = 1;
+    renderAdminReportsTable();
+  }, 250);
+}
+
+function renderAdminReportsTable() {
+  const tbody = document.getElementById('adminReportsTableBody');
+  if (!tbody) return;
+
+  const statusFilter = document.getElementById('adminStatusFilter')?.value || '';
+  const typeFilter = document.getElementById('adminTypeFilter')?.value || '';
+  const roleFilter = document.getElementById('adminRoleFilter')?.value || '';
+  const searchTerm = (document.getElementById('adminSearchInput')?.value || '').trim().toLowerCase();
+
+  let filtered = adminReportsList.filter(d => {
+    if (statusFilter && d.status !== statusFilter) {
+      if (!(statusFilter === 'CANCELLED_BY_ADMIN' && d.status === 'CANCELLED')) {
+        return false;
+      }
+    }
+    if (typeFilter && d.type !== typeFilter) return false;
+    if (roleFilter && (d.createdByRole || 'PUBLIC') !== roleFilter) return false;
+    if (searchTerm) {
+      const title = (d.title || '').toLowerCase();
+      const loc = (d.locationName || '').toLowerCase();
+      const reporter = (d.createdByName || '').toLowerCase();
+      if (!title.includes(searchTerm) && !loc.includes(searchTerm) && !reporter.includes(searchTerm)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const totalRows = filtered.length;
+  const totalPages = Math.ceil(totalRows / adminPageSize) || 1;
+  if (adminCurrentPage > totalPages) adminCurrentPage = totalPages;
+  if (adminCurrentPage < 1) adminCurrentPage = 1;
+
+  const startIndex = (adminCurrentPage - 1) * adminPageSize;
+  const pageRows = filtered.slice(startIndex, startIndex + adminPageSize);
+
+  const infoEl = document.getElementById('adminTablePaginationInfo');
+  if (infoEl) {
+    const endCount = Math.min(startIndex + adminPageSize, totalRows);
+    infoEl.textContent = totalRows === 0 ? 'No reports found' : `Showing ${startIndex + 1}-${endCount} of ${totalRows} reports`;
+  }
+  const pageLabel = document.getElementById('adminCurrentPageLabel');
+  if (pageLabel) pageLabel.textContent = `Page ${adminCurrentPage} of ${totalPages}`;
+
+  const prevBtn = document.getElementById('adminPrevPageBtn');
+  const nextBtn = document.getElementById('adminNextPageBtn');
+  if (prevBtn) prevBtn.disabled = (adminCurrentPage <= 1);
+  if (nextBtn) nextBtn.disabled = (adminCurrentPage >= totalPages);
+
+  if (totalRows === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 36px 16px;">
+          🚫 <strong>No reports found</strong> matching your current filter criteria.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = pageRows.map(d => {
+    const isCancelled = (d.status === 'CANCELLED_BY_ADMIN' || d.status === 'CANCELLED');
+    return `
+      <tr>
+        <td><strong>#${d.id}</strong></td>
+        <td><span class="badge badge-${(d.severity || 'medium').toLowerCase()}">${d.type}</span></td>
+        <td>📍 ${escapeHtml(d.locationName || 'N/A')}</td>
+        <td><strong>${escapeHtml(d.createdByName)}</strong></td>
+        <td><span class="badge badge-status-active">${escapeHtml(d.createdByRole || 'PUBLIC')}</span></td>
+        <td>
+          <select class="admin-select-status" onchange="updateAdminInlineStatus(${d.id}, this.value)">
+            <option value="VERIFIED_ACTIVE" ${d.status === 'VERIFIED_ACTIVE' ? 'selected' : ''}>🛡️ VERIFIED_ACTIVE</option>
+            <option value="IN_PROGRESS" ${d.status === 'IN_PROGRESS' ? 'selected' : ''}>🟡 IN_PROGRESS</option>
+            <option value="CLOSED" ${d.status === 'CLOSED' ? 'selected' : ''}>📁 CLOSED</option>
+            <option value="CANCELLED_BY_ADMIN" ${isCancelled ? 'selected' : ''}>⚪ CANCELLED_BY_ADMIN</option>
+          </select>
+        </td>
+        <td><span class="badge badge-${(d.severity || 'medium').toLowerCase()}">${d.severity || 'MEDIUM'}</span></td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+        <td>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬</button>
+            <button class="btn btn-danger btn-sm" onclick="promptDeleteIncident(${d.id}, '${escapeHtml(d.title)}')">🗑️ Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function changeAdminPage(delta) {
+  adminCurrentPage += delta;
+  renderAdminReportsTable();
+}
+
+async function updateAdminInlineStatus(incidentId, newStatus) {
+  try {
+    await fetchAPI('/incidents/update', {
+      method: 'POST',
+      body: { incidentId: incidentId, status: newStatus }
+    });
+
+    showToast('Status Updated', `Report #${incidentId} status updated to '${newStatus}'`, 'success');
+
+    const item = adminReportsList.find(d => d.id === incidentId);
+    if (item) item.status = newStatus;
+    renderAdminReportsTable();
+    loadAdminAnalytics();
+  } catch (err) {
+    showToast('Update Failed', err.message || 'Update failed. Try again.', 'error');
+    loadAdminReportsTable();
+  }
+}
+
+function promptDeleteIncident(incidentId, title) {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
+    return;
+  }
+
+  pendingDeleteIncidentId = incidentId;
+  const msgEl = document.getElementById('adminDeleteConfirmMessage');
+  if (msgEl) {
+    msgEl.innerHTML = `Are you sure you want to delete report <strong>#${incidentId} (${escapeHtml(title)})</strong>?<br><br>This action will delete the report from live systems.`;
+  }
+  openModal('adminDeleteConfirmModal');
+}
+
+async function executeDeleteIncident() {
+  if (!pendingDeleteIncidentId) return;
+
+  const confirmBtn = document.getElementById('adminConfirmDeleteBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Deleting...';
+  }
+
+  try {
+    await fetchAPI('/incidents/delete', {
+      method: 'DELETE',
+      body: { incidentId: pendingDeleteIncidentId }
+    });
+
+    closeModal('adminDeleteConfirmModal');
+    showToast('Deleted Successfully', `Report #${pendingDeleteIncidentId} has been deleted.`, 'success');
+
+    pendingDeleteIncidentId = null;
+    loadAdminReportsTable();
+    loadAdminAnalytics();
+    loadDisasters();
+  } catch (err) {
+    showToast('Delete Failed', err.message || 'Failed to delete report. Try again.', 'error');
+  } finally {
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Confirm Delete';
+    }
   }
 }
 

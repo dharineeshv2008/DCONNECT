@@ -322,6 +322,18 @@ module.exports = async (req, res) => {
       });
     }
 
+    // 6.1 Delete Incident
+    if ((method === 'DELETE' || method === 'POST') && pathname === '/api/incidents/delete') {
+      const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId);
+
+      if (!incidentId || isNaN(incidentId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required for deletion.' });
+      }
+
+      const deleted = await supabaseDb.deleteDisaster(incidentId);
+      return sendJson(res, 200, { success: true, message: `Incident #${incidentId} deleted successfully.`, data: deleted });
+    }
+
     if (method === 'PATCH' && (pathname.includes('/disasters/') || pathname.includes('/incidents/')) && pathname.endsWith('/status')) {
       const parts = pathname.split('/');
       const disasterId = parseInt(parts[3]);

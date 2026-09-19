@@ -489,10 +489,10 @@
         </div>
       </section>
 
-      <!-- TAB 5: Admin Command Center -->
+      <!-- TAB 5: Admin Command Center (Redesigned Table View & Filter System) -->
       <section id="adminTab" class="tab-pane">
         
-        <div class="grid-4" style="margin-bottom: 22px;">
+        <div class="grid-4" style="margin-bottom: 20px;">
           <div class="kpi-card">
             <div class="kpi-label">Active Disasters</div>
             <div class="kpi-value" id="kpiActiveDisasters">0</div>
@@ -511,8 +511,86 @@
           </div>
         </div>
 
-        <div class="grid-2">
+        <!-- Filter System Top Bar -->
+        <div class="admin-filter-bar">
+          <div class="admin-filter-group" style="flex: 2; min-width: 220px;">
+            <label>Search Reports</label>
+            <input type="text" id="adminSearchInput" class="admin-filter-control" placeholder="🔍 Search location, title, or reporter..." oninput="onAdminSearchInput()">
+          </div>
+          <div class="admin-filter-group">
+            <label>Status</label>
+            <select id="adminStatusFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Statuses</option>
+              <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE</option>
+              <option value="IN_PROGRESS">🟡 IN_PROGRESS</option>
+              <option value="CLOSED">📁 CLOSED</option>
+              <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN</option>
+              <option value="PENDING">⚠️ PENDING</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <label>Disaster Type</label>
+            <select id="adminTypeFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Types</option>
+              <option value="FLOOD">🌊 FLOOD</option>
+              <option value="FIRE">🔥 FIRE</option>
+              <option value="CYCLONE">🌀 CYCLONE</option>
+              <option value="EARTHQUAKE">🏚️ EARTHQUAKE</option>
+              <option value="LANDSLIDE">⛰️ LANDSLIDE</option>
+              <option value="OTHER">📦 OTHER</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <label>Reporter Role</label>
+            <select id="adminRoleFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Roles</option>
+              <option value="USER">Citizen (USER)</option>
+              <option value="VOLUNTEER">Volunteer</option>
+              <option value="GOVERNMENT_AGENCY">Government Agency</option>
+              <option value="ADMIN">Admin</option>
+              <option value="PUBLIC">Public</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Main Reports Table View -->
+        <div class="admin-table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Reported By</th>
+                <th>Role</th>
+                <th>Status (Inline Select)</th>
+                <th>Priority</th>
+                <th>Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminReportsTableBody">
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                  Loading incident reports from Supabase database...
+                </td>
+              </tr>
+            </tbody>
+          </table>
           
+          <!-- Pagination Footer -->
+          <div class="admin-table-footer">
+            <span id="adminTablePaginationInfo">Showing 0 of 0 reports</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button id="adminPrevPageBtn" class="btn btn-outline btn-sm" onclick="changeAdminPage(-1)" disabled>◀ Prev</button>
+              <span id="adminCurrentPageLabel" style="font-weight: 700; color: var(--text-main);">Page 1</span>
+              <button id="adminNextPageBtn" class="btn btn-outline btn-sm" onclick="changeAdminPage(1)" disabled>Next ▶</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Organization Approvals & Verifications -->
+        <div class="grid-2" style="margin-top: 24px;">
           <div class="card">
             <div class="card-header">
               <div class="card-title">🏢 Pending Organization Approvals</div>
@@ -530,8 +608,8 @@
               <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>
             </div>
           </div>
-
         </div>
+
       </section>
 
     </main>
@@ -704,6 +782,23 @@
           <button type="submit" id="doubleConfirmSubmitBtn" class="btn btn-danger" disabled>Authorize & Execute</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Admin Delete Report Confirmation Modal -->
+  <div id="adminDeleteConfirmModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Delete Disaster Report</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteConfirmModal')">✕</button>
+      </div>
+      <p id="adminDeleteConfirmMessage" style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        Are you sure you want to delete this report?
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteConfirmModal')">Cancel</button>
+        <button type="button" id="adminConfirmDeleteBtn" class="btn btn-danger" onclick="executeDeleteIncident()">Confirm Delete</button>
+      </div>
     </div>
   </div>
 
