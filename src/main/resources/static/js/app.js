@@ -28,6 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
   initGeolocation();
   initSupabaseRealtime();
   restoreSession();
+
+  // Rule 8: Real-time 2s periodic polling sync
+  setInterval(() => {
+    if (currentUser && currentUser.approved) {
+      const activeTab = document.querySelector('.tab-content.active');
+      if (activeTab && activeTab.id === 'feedTab') {
+        loadDisasters();
+      }
+    }
+  }, 2000);
 });
 
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
