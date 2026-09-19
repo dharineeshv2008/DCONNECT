@@ -1,0 +1,21 @@
+{
+  "name": "d-connect-disaster-management",
+  "version": "1.0.0",
+  "description": "Disaster Management Coordination App (D-Connect)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test:e2e": "npx playwright test --config=e2e-playwright/playwright.config.js",
+    "test:headed": "npx playwright test --config=e2e-playwright/playwright.config.js --headed",
+    "debug:e2e": "node e2e-playwright/debug-monitor.js",
+    "report:e2e": "npx playwright show-report e2e-playwright/playwright-report"
+  },
+  "keywords": [
+    "disaster-management",
+    "playwright",
+    "fullstack",
+    "e2e"
+  ],
+  "author": "Antigravity Engineering",
+  "license": "ISC"
+}

@@ -7,6 +7,9 @@ node_modules/
 
 # Playwright artifacts
 .playwright-mcp/
+auth.json
+playwright-report/
+test-results/
 
 # OS & IDE files
 .DS_Store

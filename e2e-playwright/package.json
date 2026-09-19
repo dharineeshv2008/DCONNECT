@@ -1,0 +1,16 @@
+{
+  "name": "d-connect-e2e",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Playwright E2E and Multi-Tab Debugging Suite for D-Connect Disaster Management App",
+  "scripts": {
+    "test": "playwright test --config=playwright.config.js",
+    "test:ui": "playwright test --config=playwright.config.js --ui",
+    "test:headed": "playwright test --config=playwright.config.js --headed",
+    "debug": "node debug-monitor.js",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
