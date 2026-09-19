@@ -38,6 +38,12 @@ module.exports = async (req, res) => {
   if (pathname.endsWith('/index.js')) {
     pathname = pathname.replace('/index.js', '');
   }
+  if (pathname.endsWith('.js')) {
+    pathname = pathname.slice(0, -3);
+  }
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    pathname = pathname.slice(0, -1);
+  }
   if (!pathname.startsWith('/api')) {
     pathname = '/api' + pathname;
   }

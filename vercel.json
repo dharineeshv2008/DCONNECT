@@ -6,7 +6,15 @@
       "destination": "/api/auth/register.js"
     },
     {
+      "source": "/api/auth/register.js",
+      "destination": "/api/auth/register.js"
+    },
+    {
       "source": "/api/auth/login",
+      "destination": "/api/auth/login.js"
+    },
+    {
+      "source": "/api/auth/login.js",
       "destination": "/api/auth/login.js"
     },
     {
@@ -26,63 +34,7 @@
       "destination": "/api/incidents/list.js"
     },
     {
-      "source": "/api/disasters",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/disasters/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/incidents",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/incidents/report",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/reports",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/volunteers",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/volunteers/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/assignments",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/assignments/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/resources",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/comments",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/comments/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/admin/(.*)",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/users",
-      "destination": "/api/index.js"
-    },
-    {
-      "source": "/api/config",
+      "source": "/api/(.*)",
       "destination": "/api/index.js"
     },
     {
