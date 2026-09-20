@@ -3,6 +3,7 @@
  */
 
 const { supabaseDb } = require('../../supabaseClient');
+const { sendAdminResourceNotification } = require('../../telegramBot');
 
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
@@ -78,6 +79,13 @@ module.exports = async (req, res) => {
       status: status,
       contactPhone: body.contactPhone || body.contact_phone || null
     });
+
+    if (newResource) {
+      sendAdminResourceNotification({
+        ...newResource,
+        providerName: body.providerName || body.provider_name || 'Relief Agency'
+      }).catch(err => console.warn('Telegram notification warning:', err.message));
+    }
 
     return sendJson(res, 201, {
       success: true,

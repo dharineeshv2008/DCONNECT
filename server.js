@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const { supabaseDb } = require('./supabaseClient');
+const { handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification } = require('./telegramBot');
 
 const PORT = process.env.PORT || 8000;
 const STATIC_DIR = path.join(__dirname, 'src', 'main', 'resources', 'static');
@@ -81,6 +82,11 @@ const server = http.createServer(async (req, res) => {
   // ==============================================================================
 
   try {
+    // Telegram Webhook Endpoint
+    if (pathname === '/api/telegram/webhook') {
+      return handleTelegramWebhook(req, res);
+    }
+
     // 0. Config
     if (method === 'GET' && pathname === '/api/config') {
       return sendJson(res, 200, {
@@ -326,6 +332,12 @@ const server = http.createServer(async (req, res) => {
           message: body.description
         });
 
+        // Trigger Telegram alert for Admin Approval
+        sendAdminIncidentNotification({
+          ...newDisaster,
+          createdByName: body.reporterName || 'Anonymous Citizen'
+        }).catch(err => console.warn('Telegram notification error:', err.message));
+
         return sendJson(res, 201, {
           success: true,
           message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster published directly to live pipeline.' : 'Citizen disaster report submitted. Awaiting Admin verification.',
@@ -484,6 +496,13 @@ const server = http.createServer(async (req, res) => {
         status: body.status || 'ACTIVE',
         contactPhone: body.contactPhone || body.contact_phone || null
       });
+
+      if (newRes) {
+        sendAdminResourceNotification({
+          ...newRes,
+          providerName: body.providerName || body.provider_name || 'Relief Agency'
+        }).catch(err => console.warn('Telegram notification error:', err.message));
+      }
 
       return sendJson(res, 201, {
         success: true,

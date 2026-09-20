@@ -525,23 +525,50 @@ const supabaseDb = {
   async updateResource(id, updates) {
     const cleanUpdates = {};
     if (updates.resource_type || updates.resourceType) cleanUpdates.resource_type = updates.resource_type || updates.resourceType;
-    if (updates.description !== undefined) {
-      cleanUpdates.description = updates.description;
-      cleanUpdates.resource_name = updates.description;
+    if (updates.description !== undefined || updates.resourceName !== undefined || updates.resource_name !== undefined) {
+      const val = updates.description !== undefined ? updates.description : (updates.resourceName || updates.resource_name);
+      cleanUpdates.description = val;
+      cleanUpdates.resource_name = val;
     }
     if (updates.quantity !== undefined) cleanUpdates.quantity = parseInt(updates.quantity);
+    if (updates.unit !== undefined) cleanUpdates.unit = updates.unit;
     if (updates.available_until !== undefined || updates.availableUntil !== undefined) {
       cleanUpdates.available_until = updates.available_until || updates.availableUntil;
     }
-    if (updates.status !== undefined) cleanUpdates.status = updates.status;
+    if (updates.status !== undefined) cleanUpdates.status = sanitizeResourceStatus(updates.status);
+    if (updates.contact_phone !== undefined || updates.contactPhone !== undefined) {
+      cleanUpdates.contact_phone = updates.contact_phone || updates.contactPhone;
+    }
 
-    const { data, error } = await supabase
-      .from('resources')
-      .update(cleanUpdates)
-      .eq('id', id)
-      .select();
-    if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    try {
+      const { data, error } = await supabase
+        .from('resources')
+        .update(cleanUpdates)
+        .eq('id', id)
+        .select();
+      if (error) throw error;
+      return data && data.length > 0 ? data[0] : null;
+    } catch (err) {
+      if (err.message && (err.message.includes('column') || err.message.includes('schema cache') || err.code === 'PGRST204')) {
+        console.warn('Fallback updating resource without extra schema columns:', err.message);
+        const fallbackUpdates = {};
+        if (cleanUpdates.resource_type) fallbackUpdates.resource_type = cleanUpdates.resource_type;
+        if (cleanUpdates.resource_name) fallbackUpdates.resource_name = cleanUpdates.resource_name;
+        if (cleanUpdates.quantity !== undefined) fallbackUpdates.quantity = cleanUpdates.quantity;
+        if (cleanUpdates.unit) fallbackUpdates.unit = cleanUpdates.unit;
+        if (cleanUpdates.status) fallbackUpdates.status = cleanUpdates.status;
+        if (cleanUpdates.contact_phone) fallbackUpdates.contact_phone = cleanUpdates.contact_phone;
+
+        const { data: dFallback, error: eFallback } = await supabase
+          .from('resources')
+          .update(fallbackUpdates)
+          .eq('id', id)
+          .select();
+        if (eFallback) throw eFallback;
+        return dFallback && dFallback.length > 0 ? dFallback[0] : null;
+      }
+      throw err;
+    }
   },
 
   async deleteResource(id) {

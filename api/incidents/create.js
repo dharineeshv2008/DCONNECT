@@ -3,6 +3,7 @@
  */
 
 const { supabaseDb } = require('../../supabaseClient');
+const { sendAdminIncidentNotification } = require('../../telegramBot');
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371.0;
@@ -125,6 +126,12 @@ module.exports = async (req, res) => {
         longitude: userLon,
         message: body.description || 'Emergency reported.'
       });
+
+      // Send Telegram alert to admin for approval
+      sendAdminIncidentNotification({
+        ...newDisaster,
+        createdByName: body.reporterName || 'Anonymous Citizen'
+      }).catch(err => console.warn('Telegram notification warning:', err.message));
 
       return sendJson(res, 201, {
         success: true,

@@ -5,6 +5,7 @@
 
 const url = require('url');
 const { supabaseDb } = require('../supabaseClient');
+const { handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification } = require('../telegramBot');
 
 function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371.0;
