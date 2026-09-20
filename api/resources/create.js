@@ -37,6 +37,9 @@ module.exports = async (req, res) => {
     const description = (body.description || body.resourceName || body.resource_name || '').trim();
     const quantity = parseInt(body.quantity);
     const availableUntil = body.availableUntil || body.available_until || null;
+    const latitude = body.latitude !== undefined ? parseFloat(body.latitude) : (body.lat !== undefined ? parseFloat(body.lat) : 13.0827);
+    const longitude = body.longitude !== undefined ? parseFloat(body.longitude) : (body.lng !== undefined ? parseFloat(body.lng) : 80.2707);
+    const address = (body.address || body.location || body.location_name || description || 'Central Relief Pool').trim();
 
     if (!description) {
       return sendJson(res, 400, {
@@ -54,6 +57,13 @@ module.exports = async (req, res) => {
       });
     }
 
+    let status = (body.status || 'ACTIVE').toString().toUpperCase().trim();
+    if (status === 'AVAILABLE') status = 'ACTIVE';
+    if (status === 'REMOVED') status = 'INACTIVE';
+    if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(status)) {
+      status = 'ACTIVE';
+    }
+
     const newResource = await supabaseDb.createResource({
       disasterId: body.disasterId || body.disaster_id || null,
       providerId: body.providerId || body.provider_id || null,
@@ -62,8 +72,11 @@ module.exports = async (req, res) => {
       resourceName: description,
       quantity: quantity,
       unit: body.unit || 'units',
+      latitude: isNaN(latitude) ? 13.0827 : latitude,
+      longitude: isNaN(longitude) ? 80.2707 : longitude,
+      address: address,
       availableUntil: availableUntil,
-      status: body.status || 'ACTIVE',
+      status: status,
       contactPhone: body.contactPhone || body.contact_phone || null
     });
 

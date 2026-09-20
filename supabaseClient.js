@@ -12,6 +12,15 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+function sanitizeResourceStatus(input) {
+  if (!input) return 'ACTIVE';
+  const upper = String(input).trim().toUpperCase();
+  if (upper === 'AVAILABLE') return 'ACTIVE';
+  if (upper === 'REMOVED') return 'INACTIVE';
+  if (['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(upper)) return upper;
+  return 'ACTIVE';
+}
+
 const supabaseDb = {
   supabase,
 
@@ -383,8 +392,7 @@ const supabaseDb = {
     const expiredIdsToUpdate = [];
 
     const mapped = (data || []).map(r => {
-      let currentStatus = r.status || 'ACTIVE';
-      if (currentStatus === 'AVAILABLE') currentStatus = 'ACTIVE';
+      let currentStatus = sanitizeResourceStatus(r.status);
 
       if (r.available_until && new Date(r.available_until) < now && currentStatus === 'ACTIVE') {
         currentStatus = 'EXPIRED';
@@ -403,6 +411,9 @@ const supabaseDb = {
         description: r.description || r.resource_name || 'Emergency Supply Post',
         quantity: r.quantity || 1,
         unit: r.unit || 'units',
+        latitude: r.latitude ? parseFloat(r.latitude) : 13.0827,
+        longitude: r.longitude ? parseFloat(r.longitude) : 80.2707,
+        address: r.address || r.location_name || 'Central Command Pool',
         availableUntil: r.available_until || null,
         status: currentStatus,
         contactPhone: r.contact_phone || r.users?.phone || 'N/A',
@@ -441,7 +452,7 @@ const supabaseDb = {
     }
 
     const availableUntilVal = resData.available_until || resData.availableUntil || null;
-    let initialStatus = resData.status || 'ACTIVE';
+    let initialStatus = sanitizeResourceStatus(resData.status);
     if (availableUntilVal && new Date(availableUntilVal) < new Date()) {
       initialStatus = 'EXPIRED';
     }
@@ -454,6 +465,9 @@ const supabaseDb = {
       description: resData.description || resData.resource_name || resData.resourceName || 'Emergency Supply Post',
       quantity: parseInt(resData.quantity) || 1,
       unit: resData.unit || 'units',
+      latitude: resData.latitude ? parseFloat(resData.latitude) : 13.0827,
+      longitude: resData.longitude ? parseFloat(resData.longitude) : 80.2707,
+      address: resData.address || resData.locationName || 'Central Relief Pool',
       available_until: availableUntilVal,
       status: initialStatus,
       contact_phone: resData.contact_phone || resData.contactPhone || null
@@ -482,9 +496,9 @@ const supabaseDb = {
         return this.createResource(cleanRes);
       }
 
-      // If available_until or description column does not exist in schema cache:
-      if (err.message && (err.message.includes('available_until') || err.message.includes('description') || err.message.includes('schema cache') || err.code === 'PGRST204')) {
-        console.warn('Fallback inserting resource without missing schema columns:', err.message);
+      // Fallback without missing schema columns (e.g. available_until, description, latitude, longitude, address)
+      if (err.message && (err.message.includes('column') || err.message.includes('schema cache') || err.code === 'PGRST204')) {
+        console.warn('Fallback inserting resource without extra schema columns:', err.message);
         const fallbackRes = {
           disaster_id: cleanRes.disaster_id,
           provider_id: cleanRes.provider_id,

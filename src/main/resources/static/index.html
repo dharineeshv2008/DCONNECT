@@ -463,9 +463,39 @@
                 </div>
               </div>
 
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Available Until (Expiry Date & Time) *</label>
+                  <input type="datetime-local" id="resAvailableUntil" class="form-control" required>
+                </div>
+                <div class="form-group">
+                  <label>Status *</label>
+                  <select id="resStatus" class="form-control" required>
+                    <option value="ACTIVE" selected>🟢 ACTIVE</option>
+                    <option value="INACTIVE">⚪ INACTIVE</option>
+                    <option value="EXPIRED">🟠 EXPIRED</option>
+                  </select>
+                </div>
+              </div>
+
               <div class="form-group">
-                <label>Available Until (Expiry Date & Time) *</label>
-                <input type="datetime-local" id="resAvailableUntil" class="form-control" required>
+                <label>Pickup Location / Address *</label>
+                <input type="text" id="resAddress" class="form-control" placeholder="e.g. Relief Warehouse Gate 3, Central Stadium" required>
+              </div>
+
+              <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 14px; font-weight: 600; padding: 10px;" onclick="openLocationPicker('resource')">
+                📍 Select Pickup Location on Interactive Map
+              </button>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Latitude *</label>
+                  <input type="number" step="any" id="resLatitude" class="form-control" placeholder="e.g. 13.0827" required value="13.0827">
+                </div>
+                <div class="form-group">
+                  <label>Longitude *</label>
+                  <input type="number" step="any" id="resLongitude" class="form-control" placeholder="e.g. 80.2707" required value="80.2707">
+                </div>
               </div>
 
               <div class="form-group">
@@ -964,8 +994,8 @@
             <label>Status *</label>
             <select id="adminEditResStatus" class="form-control" required>
               <option value="ACTIVE">🟢 ACTIVE</option>
+              <option value="INACTIVE">⚪ INACTIVE</option>
               <option value="EXPIRED">🟠 EXPIRED</option>
-              <option value="REMOVED">🔴 REMOVED</option>
             </select>
           </div>
         </div>

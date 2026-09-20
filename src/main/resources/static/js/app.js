@@ -990,9 +990,13 @@ async function loadResources() {
 
     container.innerHTML = list.map(r => {
       const isExpired = r.status === 'EXPIRED';
-      const isRemoved = r.status === 'REMOVED';
-      const badgeClass = isExpired ? 'badge-medium' : (isRemoved ? 'badge-high' : 'badge-status-active');
+      const isInactive = r.status === 'INACTIVE' || r.status === 'REMOVED';
+      const badgeClass = isExpired ? 'badge-medium' : (isInactive ? 'badge-high' : 'badge-status-active');
       const formattedExpiry = r.availableUntil ? new Date(r.availableUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
+      const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
+      const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      const addressText = escapeHtml(r.address || 'Central Relief Pool');
 
       return `
         <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
@@ -1004,8 +1008,14 @@ async function loadResources() {
             </div>
           </div>
           <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
+            📍 Pickup Location: <strong>${addressText}</strong><br>
             Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
             ⏳ Available Until: <strong>${formattedExpiry}</strong>
+          </div>
+          <div style="margin-top: 8px;">
+            <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; padding: 4px 10px; text-decoration: none;">
+              🗺️ View on Google Maps
+            </a>
           </div>
         </div>
       `;
@@ -1021,6 +1031,10 @@ async function handleResourceSubmit(e) {
 
   const desc = document.getElementById('resDescription')?.value.trim();
   const untilVal = document.getElementById('resAvailableUntil')?.value;
+  const address = document.getElementById('resAddress')?.value.trim();
+  const latVal = parseFloat(document.getElementById('resLatitude')?.value);
+  const lngVal = parseFloat(document.getElementById('resLongitude')?.value);
+  const statusVal = document.getElementById('resStatus')?.value || 'ACTIVE';
 
   if (!desc) {
     showToast('Missing Field', 'Please provide a resource description.', 'warning');
@@ -1040,6 +1054,10 @@ async function handleResourceSubmit(e) {
     quantity: parseInt(document.getElementById('resQty').value),
     unit: document.getElementById('resUnit').value.trim(),
     availableUntil: new Date(untilVal).toISOString(),
+    status: statusVal.toUpperCase(),
+    latitude: !isNaN(latVal) ? latVal : 13.0827,
+    longitude: !isNaN(lngVal) ? lngVal : 80.2707,
+    address: address || desc || 'Central Relief Pool',
     contactPhone: document.getElementById('resPhone').value.trim() || currentUser.phone
   };
 
@@ -1184,8 +1202,8 @@ function renderAdminResourcesTable() {
         <td>
           <select class="admin-select-status" onchange="updateAdminInlineResourceStatus(${r.id}, this.value)">
             <option value="ACTIVE" ${r.status === 'ACTIVE' ? 'selected' : ''}>🟢 ACTIVE</option>
+            <option value="INACTIVE" ${r.status === 'INACTIVE' || r.status === 'REMOVED' ? 'selected' : ''}>⚪ INACTIVE</option>
             <option value="EXPIRED" ${r.status === 'EXPIRED' ? 'selected' : ''}>🟠 EXPIRED</option>
-            <option value="REMOVED" ${r.status === 'REMOVED' ? 'selected' : ''}>🔴 REMOVED</option>
           </select>
         </td>
         <td>
@@ -1558,6 +1576,10 @@ function openLocationPicker(context = 'report') {
     const aLat = parseFloat(document.getElementById('adminEditLatitude')?.value);
     const aLng = parseFloat(document.getElementById('adminEditLongitude')?.value);
     if (!isNaN(aLat) && !isNaN(aLng)) { initLat = aLat; initLng = aLng; }
+  } else if (context === 'resource') {
+    const resLat = parseFloat(document.getElementById('resLatitude')?.value);
+    const resLng = parseFloat(document.getElementById('resLongitude')?.value);
+    if (!isNaN(resLat) && !isNaN(resLng)) { initLat = resLat; initLng = resLng; }
   }
 
   selectedCoords = { lat: initLat, lng: initLng };
@@ -1632,6 +1654,12 @@ function confirmLocationPickerSelection() {
     if (document.getElementById('adminEditLongitude')) document.getElementById('adminEditLongitude').value = selectedCoords.lng.toFixed(6);
     if (document.getElementById('adminEditLocationName') && selectedAddress) {
       document.getElementById('adminEditLocationName').value = selectedAddress;
+    }
+  } else if (locationPickerContext === 'resource') {
+    if (document.getElementById('resLatitude')) document.getElementById('resLatitude').value = selectedCoords.lat.toFixed(6);
+    if (document.getElementById('resLongitude')) document.getElementById('resLongitude').value = selectedCoords.lng.toFixed(6);
+    if (document.getElementById('resAddress') && selectedAddress) {
+      document.getElementById('resAddress').value = selectedAddress;
     }
   }
   closeModal('locationPickerModal');

@@ -46,18 +46,29 @@ module.exports = async (req, res) => {
     if (body.resourceType || body.resource_type) updates.resourceType = body.resourceType || body.resource_type;
     if (body.description !== undefined) updates.description = body.description;
     if (body.quantity !== undefined) updates.quantity = parseInt(body.quantity);
+    if (body.latitude !== undefined || body.lat !== undefined) {
+      const lat = body.latitude !== undefined ? parseFloat(body.latitude) : parseFloat(body.lat);
+      if (!isNaN(lat)) updates.latitude = lat;
+    }
+    if (body.longitude !== undefined || body.lng !== undefined) {
+      const lng = body.longitude !== undefined ? parseFloat(body.longitude) : parseFloat(body.lng);
+      if (!isNaN(lng)) updates.longitude = lng;
+    }
+    if (body.address !== undefined || body.location !== undefined) {
+      updates.address = body.address || body.location;
+    }
     if (body.availableUntil !== undefined || body.available_until !== undefined) {
       updates.availableUntil = body.availableUntil || body.available_until;
     }
     if (body.status !== undefined) {
-      const allowedStatuses = ['ACTIVE', 'EXPIRED', 'REMOVED', 'AVAILABLE'];
-      let st = body.status;
+      let st = String(body.status).toUpperCase().trim();
       if (st === 'AVAILABLE') st = 'ACTIVE';
-      if (!allowedStatuses.includes(st)) {
+      if (st === 'REMOVED') st = 'INACTIVE';
+      if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(st)) {
         return sendJson(res, 400, {
           success: false,
           error: 'Bad Request',
-          message: `Invalid status: ${body.status}. Allowed: ACTIVE, EXPIRED, REMOVED`
+          message: `Invalid status: ${body.status}. Allowed values: ACTIVE, INACTIVE, EXPIRED`
         });
       }
       updates.status = st;
