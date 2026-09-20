@@ -37,7 +37,20 @@ module.exports = async (req, res) => {
     const resourceType = body.resourceType || body.resource_type || 'OTHER';
     const description = (body.description || body.resourceName || body.resource_name || '').trim();
     const quantity = parseInt(body.quantity);
-    const availableUntil = body.availableUntil || body.available_until || null;
+    const rawExpiry = body.expiry_date || body.expiryDate || body.availableUntil || body.available_until || null;
+    let expiryIso = null;
+    if (rawExpiry && rawExpiry !== 'null' && rawExpiry !== 'N/A' && String(rawExpiry).trim() !== '') {
+      const d = new Date(rawExpiry);
+      if (isNaN(d.getTime())) {
+        return sendJson(res, 400, {
+          success: false,
+          error: 'Bad Request',
+          message: 'Invalid expiry_date format. Please provide a valid date or null.'
+        });
+      }
+      expiryIso = d.toISOString();
+    }
+
     const latitude = body.latitude !== undefined ? parseFloat(body.latitude) : (body.lat !== undefined ? parseFloat(body.lat) : 13.0827);
     const longitude = body.longitude !== undefined ? parseFloat(body.longitude) : (body.lng !== undefined ? parseFloat(body.lng) : 80.2707);
     const address = (body.address || body.location || body.location_name || description || 'Central Relief Pool').trim();
@@ -75,7 +88,9 @@ module.exports = async (req, res) => {
       latitude: isNaN(latitude) ? 13.0827 : latitude,
       longitude: isNaN(longitude) ? 80.2707 : longitude,
       address: address,
-      availableUntil: availableUntil,
+      availableUntil: expiryIso,
+      expiryDate: expiryIso,
+      expiry_date: expiryIso,
       status: status,
       contactPhone: body.contactPhone || body.contact_phone || null
     });

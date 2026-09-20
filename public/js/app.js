@@ -107,13 +107,15 @@ function initSupabaseRealtime() {
           if (payload.eventType === 'INSERT') {
             showToast('New Incident Reported', `🚨 ${payload.new.title} (${payload.new.type})`, 'warning');
           } else if (payload.eventType === 'UPDATE') {
-            showToast('Incident Updated', `Disaster #${payload.new.id} status changed to ${payload.new.status}`, 'info');
+            showToast('Incident Status Updated', `Disaster #${payload.new.id} status changed to ${payload.new.status}`, 'info');
           }
           if (document.getElementById('feedTab')?.classList.contains('active')) {
             loadDisasters();
           }
           if (currentUser?.role === 'ADMIN') {
-            loadAdminAnalytics();
+            if (typeof loadAdminReportsTable === 'function') loadAdminReportsTable();
+            if (typeof loadAdminPendingDisasters === 'function') loadAdminPendingDisasters();
+            if (typeof loadAdminAnalytics === 'function') loadAdminAnalytics();
           }
         })
         .subscribe();
@@ -136,6 +138,21 @@ function initSupabaseRealtime() {
           if (activeDisasterIdForComments && payload.new.disaster_id === activeDisasterIdForComments) {
             loadComments(activeDisasterIdForComments);
           }
+        })
+        .subscribe();
+
+      // Channel 4: Emergency Resource Pool
+      supabaseClient
+        .channel('public:resources')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'resources' }, payload => {
+          console.log('📦 [Realtime]: Resource change detected:', payload.eventType);
+          if (payload.eventType === 'INSERT') {
+            showToast('New Resource Offered', `📦 ${payload.new.resource_name || payload.new.description || 'Emergency Resource'} contributed`, 'info');
+          } else if (payload.eventType === 'UPDATE') {
+            showToast('Resource Status Updated', `Resource #${payload.new.id} status changed to ${payload.new.status}`, 'info');
+          }
+          if (typeof loadResources === 'function') loadResources();
+          if (currentUser?.role === 'ADMIN' && typeof loadAdminResourcesTable === 'function') loadAdminResourcesTable();
         })
         .subscribe();
 
@@ -972,6 +989,21 @@ async function executeAssignTaskSubmit(payload) {
   }
 }
 
+function toggleNoExpiry(context = 'resource') {
+  const isResource = context === 'resource';
+  const toggle = document.getElementById(isResource ? 'resNoExpiryToggle' : 'adminEditResNoExpiryToggle');
+  const dateInput = document.getElementById(isResource ? 'resAvailableUntil' : 'adminEditResAvailableUntil');
+
+  if (!toggle || !dateInput) return;
+
+  if (toggle.checked) {
+    dateInput.value = '';
+    dateInput.disabled = true;
+  } else {
+    dateInput.disabled = false;
+  }
+}
+
 // ==============================================================================
 // 9. RESOURCE MANAGEMENT
 // ==============================================================================
@@ -992,7 +1024,8 @@ async function loadResources() {
       const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
       const isDispatched = r.status === 'DISPATCHED';
       const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
-      const formattedExpiry = r.availableUntil ? new Date(r.availableUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
+      const expiryRaw = r.expiryDate || r.availableUntil || r.expiry_date;
+      const formattedExpiry = expiryRaw ? new Date(expiryRaw).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
       const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
       const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
       const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
@@ -1030,6 +1063,7 @@ async function handleResourceSubmit(e) {
   if (!currentUser) return;
 
   const desc = document.getElementById('resDescription')?.value.trim();
+  const noExpiryChecked = document.getElementById('resNoExpiryToggle')?.checked;
   const untilVal = document.getElementById('resAvailableUntil')?.value;
   const address = document.getElementById('resAddress')?.value.trim();
   const latVal = parseFloat(document.getElementById('resLatitude')?.value);
@@ -1041,9 +1075,12 @@ async function handleResourceSubmit(e) {
     return;
   }
 
-  if (!untilVal) {
-    showToast('Missing Field', 'Please set the Available Until expiry date and time.', 'warning');
-    return;
+  let expiryIso = null;
+  if (!noExpiryChecked && untilVal) {
+    const d = new Date(untilVal);
+    if (!isNaN(d.getTime())) {
+      expiryIso = d.toISOString();
+    }
   }
 
   const payload = {
@@ -1053,7 +1090,9 @@ async function handleResourceSubmit(e) {
     resourceName: desc,
     quantity: parseInt(document.getElementById('resQty').value),
     unit: document.getElementById('resUnit').value.trim(),
-    availableUntil: new Date(untilVal).toISOString(),
+    availableUntil: expiryIso,
+    expiryDate: expiryIso,
+    expiry_date: expiryIso,
     status: statusVal.toUpperCase(),
     latitude: !isNaN(latVal) ? latVal : 13.0827,
     longitude: !isNaN(lngVal) ? lngVal : 80.2707,
@@ -1069,6 +1108,8 @@ async function handleResourceSubmit(e) {
 
     showToast('Resource Created', 'Emergency supply post created successfully!', 'success');
     document.getElementById('resourceForm').reset();
+    if (document.getElementById('resNoExpiryToggle')) document.getElementById('resNoExpiryToggle').checked = false;
+    if (document.getElementById('resAvailableUntil')) document.getElementById('resAvailableUntil').disabled = false;
     loadResources();
   } catch (err) {
     showToast('Creation Failed', err.message || 'Failed to post resource.', 'error');
@@ -1244,14 +1285,34 @@ function openAdminEditResourceModal(resId) {
   document.getElementById('adminEditResType').value = item.resourceType || 'OTHER';
   document.getElementById('adminEditResDescription').value = item.description || item.resourceName || '';
   document.getElementById('adminEditResQuantity').value = item.quantity || 1;
-  document.getElementById('adminEditResStatus').value = item.status || 'ACTIVE';
+  document.getElementById('adminEditResStatus').value = item.status || 'AVAILABLE';
 
-  if (item.availableUntil) {
-    const d = new Date(item.availableUntil);
-    const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    document.getElementById('adminEditResAvailableUntil').value = isoLocal;
+  const expiryRaw = item.expiryDate || item.availableUntil || item.expiry_date;
+  const noExpiryToggle = document.getElementById('adminEditResNoExpiryToggle');
+  const dateInput = document.getElementById('adminEditResAvailableUntil');
+
+  if (expiryRaw) {
+    const d = new Date(expiryRaw);
+    if (!isNaN(d.getTime())) {
+      const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      if (dateInput) {
+        dateInput.value = isoLocal;
+        dateInput.disabled = false;
+      }
+      if (noExpiryToggle) noExpiryToggle.checked = false;
+    } else {
+      if (dateInput) {
+        dateInput.value = '';
+        dateInput.disabled = true;
+      }
+      if (noExpiryToggle) noExpiryToggle.checked = true;
+    }
   } else {
-    document.getElementById('adminEditResAvailableUntil').value = '';
+    if (dateInput) {
+      dateInput.value = '';
+      dateInput.disabled = true;
+    }
+    if (noExpiryToggle) noExpiryToggle.checked = true;
   }
 
   openModal('adminEditResourceModal');
@@ -1264,7 +1325,16 @@ async function submitAdminEditResource(e) {
   const description = document.getElementById('adminEditResDescription').value.trim();
   const quantity = parseInt(document.getElementById('adminEditResQuantity').value);
   const status = document.getElementById('adminEditResStatus').value;
+  const noExpiryChecked = document.getElementById('adminEditResNoExpiryToggle')?.checked;
   const availableUntilVal = document.getElementById('adminEditResAvailableUntil').value;
+
+  let expiryIso = null;
+  if (!noExpiryChecked && availableUntilVal) {
+    const d = new Date(availableUntilVal);
+    if (!isNaN(d.getTime())) {
+      expiryIso = d.toISOString();
+    }
+  }
 
   try {
     await fetchAPI('/resources/update', {
@@ -1275,7 +1345,9 @@ async function submitAdminEditResource(e) {
         description,
         quantity,
         status,
-        availableUntil: availableUntilVal ? new Date(availableUntilVal).toISOString() : null
+        availableUntil: expiryIso,
+        expiryDate: expiryIso,
+        expiry_date: expiryIso
       }
     });
 

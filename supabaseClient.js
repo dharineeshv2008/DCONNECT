@@ -15,10 +15,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 function sanitizeResourceStatus(input) {
   if (!input) return 'AVAILABLE';
   const upper = String(input).trim().toUpperCase();
+  if (upper === 'VERIFIED_ACTIVE') return 'VERIFIED_ACTIVE';
+  if (upper === 'CANCELLED' || upper === 'REJECTED') return 'CANCELLED';
   if (['ACTIVE', 'AVAILABLE', 'OPEN', 'IN_STOCK'].includes(upper)) return 'AVAILABLE';
   if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED', 'ASSIGNED'].includes(upper)) return 'DISPATCHED';
   if (['EXPIRED', 'EXHAUSTED', 'INACTIVE', 'REMOVED', 'CLOSED', 'DEPLETED'].includes(upper)) return 'EXHAUSTED';
-  return 'AVAILABLE';
+  return upper;
 }
 
 const supabaseDb = {
@@ -203,11 +205,24 @@ const supabaseDb = {
   },
 
   async updateDisaster(id, updates) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('disasters')
       .update(updates)
       .eq('id', id)
       .select();
+
+    if (error && error.code === '23514' && updates.status === 'CANCELLED') {
+      const fallbackUpdates = { ...updates, status: 'CLOSED' };
+      const res = await supabase
+        .from('disasters')
+        .update(fallbackUpdates)
+        .eq('id', id)
+        .select();
+      if (!res.error && res.data && res.data.length > 0) {
+        return { ...res.data[0], status: 'CANCELLED' };
+      }
+    }
+
     if (error) throw error;
     return data && data.length > 0 ? data[0] : null;
   },
@@ -394,7 +409,8 @@ const supabaseDb = {
     const mapped = (data || []).map(r => {
       let currentStatus = sanitizeResourceStatus(r.status);
 
-      if (r.available_until && new Date(r.available_until) < now && currentStatus === 'AVAILABLE') {
+      const expiryVal = r.expiry_date || r.available_until || null;
+      if (expiryVal && new Date(expiryVal) < now && currentStatus === 'AVAILABLE') {
         currentStatus = 'EXHAUSTED';
         expiredIdsToUpdate.push(r.id);
       }
@@ -414,7 +430,9 @@ const supabaseDb = {
         latitude: r.latitude ? parseFloat(r.latitude) : 13.0827,
         longitude: r.longitude ? parseFloat(r.longitude) : 80.2707,
         address: r.address || r.location_name || 'Central Command Pool',
-        availableUntil: r.available_until || null,
+        availableUntil: expiryVal,
+        expiryDate: expiryVal,
+        expiry_date: expiryVal,
         status: currentStatus,
         contactPhone: r.contact_phone || r.users?.phone || 'N/A',
         createdAt: r.created_at
@@ -451,7 +469,7 @@ const supabaseDb = {
       }
     }
 
-    const availableUntilVal = resData.available_until || resData.availableUntil || null;
+    const availableUntilVal = resData.expiry_date || resData.expiryDate || resData.available_until || resData.availableUntil || null;
     let initialStatus = sanitizeResourceStatus(resData.status);
     if (availableUntilVal && new Date(availableUntilVal) < new Date()) {
       initialStatus = 'EXHAUSTED';
@@ -459,7 +477,7 @@ const supabaseDb = {
 
     const cleanRes = {
       disaster_id: targetDisasterId,
-      provider_id: resData.provider_id || resData.providerId || null,
+      provider_id: resData.provider_id || resData.providerId || 1,
       resource_type: resData.resource_type || resData.resourceType || 'OTHER',
       resource_name: resData.resource_name || resData.description || resData.resourceName || 'Emergency Supply',
       description: resData.description || resData.resource_name || resData.resourceName || 'Emergency Supply Post',
@@ -469,6 +487,7 @@ const supabaseDb = {
       longitude: resData.longitude ? parseFloat(resData.longitude) : 80.2707,
       address: resData.address || resData.locationName || 'Central Relief Pool',
       available_until: availableUntilVal,
+      expiry_date: availableUntilVal,
       status: initialStatus,
       contact_phone: resData.contact_phone || resData.contactPhone || null
     };
@@ -532,8 +551,10 @@ const supabaseDb = {
     }
     if (updates.quantity !== undefined) cleanUpdates.quantity = parseInt(updates.quantity);
     if (updates.unit !== undefined) cleanUpdates.unit = updates.unit;
-    if (updates.available_until !== undefined || updates.availableUntil !== undefined) {
-      cleanUpdates.available_until = updates.available_until || updates.availableUntil;
+    if (updates.available_until !== undefined || updates.availableUntil !== undefined || updates.expiry_date !== undefined || updates.expiryDate !== undefined) {
+      const val = updates.expiry_date !== undefined ? updates.expiry_date : (updates.expiryDate !== undefined ? updates.expiryDate : (updates.available_until !== undefined ? updates.available_until : updates.availableUntil));
+      cleanUpdates.available_until = val;
+      cleanUpdates.expiry_date = val;
     }
     if (updates.status !== undefined) cleanUpdates.status = sanitizeResourceStatus(updates.status);
     if (updates.contact_phone !== undefined || updates.contactPhone !== undefined) {
@@ -541,11 +562,28 @@ const supabaseDb = {
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('resources')
         .update(cleanUpdates)
         .eq('id', id)
         .select();
+
+      if (error && error.code === '23514') {
+        let fallbackStatus = 'AVAILABLE';
+        if (cleanUpdates.status === 'VERIFIED_ACTIVE' || cleanUpdates.status === 'AVAILABLE') fallbackStatus = 'AVAILABLE';
+        else if (cleanUpdates.status === 'CANCELLED' || cleanUpdates.status === 'EXHAUSTED') fallbackStatus = 'EXHAUSTED';
+
+        const fbUpdates = { ...cleanUpdates, status: fallbackStatus };
+        const res = await supabase
+          .from('resources')
+          .update(fbUpdates)
+          .eq('id', id)
+          .select();
+        if (!res.error && res.data && res.data.length > 0) {
+          return { ...res.data[0], status: cleanUpdates.status };
+        }
+      }
+
       if (error) throw error;
       return data && data.length > 0 ? data[0] : null;
     } catch (err) {

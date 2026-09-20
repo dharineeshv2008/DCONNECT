@@ -79,6 +79,11 @@ module.exports = async (req, res) => {
   }
 
   try {
+    // Telegram Webhook Endpoint
+    if (pathname === '/api/telegram/webhook') {
+      return handleTelegramWebhook(req, res);
+    }
+
     // Config
     if (method === 'GET' && pathname === '/api/config') {
       return sendJson(res, 200, {
@@ -287,6 +292,12 @@ module.exports = async (req, res) => {
           message: body.description
         });
 
+        // Trigger Telegram Admin Notification
+        sendAdminIncidentNotification({
+          ...newDisaster,
+          createdByName: body.reporterName || 'Anonymous Citizen'
+        }).catch(err => console.warn('Telegram notification warning:', err.message));
+
         return sendJson(res, 201, {
           success: true,
           message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster published to live pipeline.' : 'Citizen report submitted.',
@@ -439,6 +450,13 @@ module.exports = async (req, res) => {
         status: body.status || 'ACTIVE',
         contactPhone: body.contactPhone || body.contact_phone || null
       });
+
+      if (newRes) {
+        sendAdminResourceNotification({
+          ...newRes,
+          providerName: body.providerName || body.provider_name || 'Relief Agency'
+        }).catch(err => console.warn('Telegram notification warning:', err.message));
+      }
 
       return sendJson(res, 201, { success: true, message: 'Resource supply post created successfully.', data: newRes });
     }

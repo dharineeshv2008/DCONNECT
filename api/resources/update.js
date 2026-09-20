@@ -57,8 +57,25 @@ module.exports = async (req, res) => {
     if (body.address !== undefined || body.location !== undefined) {
       updates.address = body.address || body.location;
     }
-    if (body.availableUntil !== undefined || body.available_until !== undefined) {
-      updates.availableUntil = body.availableUntil || body.available_until;
+    if (body.expiry_date !== undefined || body.expiryDate !== undefined || body.availableUntil !== undefined || body.available_until !== undefined) {
+      const rawExpiry = body.expiry_date !== undefined ? body.expiry_date : (body.expiryDate !== undefined ? body.expiryDate : (body.availableUntil !== undefined ? body.availableUntil : body.available_until));
+      if (!rawExpiry || rawExpiry === 'null' || rawExpiry === 'N/A' || String(rawExpiry).trim() === '') {
+        updates.availableUntil = null;
+        updates.expiryDate = null;
+        updates.expiry_date = null;
+      } else {
+        const d = new Date(rawExpiry);
+        if (isNaN(d.getTime())) {
+          return sendJson(res, 400, {
+            success: false,
+            error: 'Bad Request',
+            message: 'Invalid expiry_date format. Provide a valid ISO date or null.'
+          });
+        }
+        updates.availableUntil = d.toISOString();
+        updates.expiryDate = d.toISOString();
+        updates.expiry_date = d.toISOString();
+      }
     }
     if (body.status !== undefined) {
       let st = String(body.status).toUpperCase().trim();
