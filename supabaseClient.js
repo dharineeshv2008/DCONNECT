@@ -207,6 +207,25 @@ const supabaseDb = {
   },
 
   // --- VOLUNTEERS ---
+  async createVolunteerProfile(profileData) {
+    const { data, error } = await supabase
+      .from('volunteers')
+      .insert([{
+        user_id: profileData.user_id || profileData.userId,
+        skills: profileData.skills || profileData.volunteerSkills || 'General Relief',
+        availability_status: profileData.availability_status || profileData.availabilityStatus || 'AVAILABLE',
+        helped_count: profileData.helped_count || profileData.helpedCount || 0,
+        current_latitude: profileData.current_latitude || profileData.currentLatitude || 13.0827,
+        current_longitude: profileData.current_longitude || profileData.currentLongitude || 80.2707
+      }])
+      .select();
+    if (error) {
+      console.warn('Volunteer profile insertion warning:', error.message);
+      return null;
+    }
+    return data && data.length > 0 ? data[0] : null;
+  },
+
   async getVolunteers() {
     const { data, error } = await supabase
       .from('volunteers')
