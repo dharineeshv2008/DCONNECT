@@ -267,7 +267,7 @@ module.exports = async (req, res) => {
           type: type,
           title: body.title,
           description: body.description,
-          severity: body.severity || 'MEDIUM',
+          severity: body.severity || 'UNVERIFIED',
           latitude: userLat,
           longitude: userLon,
           location_name: body.locationName || `Lat: ${userLat.toFixed(4)}, Lon: ${userLon.toFixed(4)}`,
@@ -322,7 +322,42 @@ module.exports = async (req, res) => {
       });
     }
 
-    // 6.1 Delete Incident
+    // 6.1 Edit Incident (Admin)
+    if ((method === 'POST' || method === 'PUT') && pathname === '/api/incidents/edit') {
+      const incidentId = parseInt(body.id || body.disasterId || body.incidentId);
+
+      if (!incidentId || isNaN(incidentId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required for editing.' });
+      }
+
+      const updates = {};
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.title !== undefined) updates.title = body.title;
+      if (body.latitude !== undefined && !isNaN(parseFloat(body.latitude))) updates.latitude = parseFloat(body.latitude);
+      if (body.longitude !== undefined && !isNaN(parseFloat(body.longitude))) updates.longitude = parseFloat(body.longitude);
+      if (body.location_name !== undefined || body.locationName !== undefined) {
+        updates.location_name = body.location_name || body.locationName;
+      }
+      if (body.severity !== undefined) updates.severity = body.severity;
+      if (body.status !== undefined) {
+        let statusInput = body.status;
+        if (statusInput === 'CANCELLED' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'RESOLVED') {
+          statusInput = 'CLOSED';
+        }
+        updates.status = statusInput;
+      }
+
+      const updated = await supabaseDb.editDisaster(incidentId, updates);
+      return sendJson(res, 200, { success: true, message: `Incident #${incidentId} updated.`, data: updated });
+    }
+
+    // 6.2 Volunteers Directory (Strict role=VOLUNTEER)
+    if (method === 'GET' && (pathname === '/api/users/volunteers' || pathname === '/api/volunteers')) {
+      const volunteers = await supabaseDb.getVolunteersStrict();
+      return sendJson(res, 200, { success: true, count: volunteers.length, data: volunteers });
+    }
+
+    // 6.3 Delete Incident
     if ((method === 'DELETE' || method === 'POST') && pathname === '/api/incidents/delete') {
       const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId);
 

@@ -149,9 +149,45 @@ const supabaseDb = {
   },
 
   async createDisaster(disasterData) {
+    const rawSeverity = (disasterData.severity || 'UNVERIFIED').toUpperCase();
+    const dbSeverity = (rawSeverity === 'UNVERIFIED') ? 'LOW' : rawSeverity;
+
+    const payload = {
+      ...disasterData,
+      severity: dbSeverity,
+      status: disasterData.status || 'PENDING'
+    };
     const { data, error } = await supabase
       .from('disasters')
-      .insert([disasterData])
+      .insert([payload])
+      .select();
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    return {
+      ...data[0],
+      severity: rawSeverity
+    };
+  },
+
+  async editDisaster(id, updates) {
+    const cleanUpdates = {};
+    if (updates.description !== undefined) cleanUpdates.description = updates.description;
+    if (updates.latitude !== undefined && !isNaN(parseFloat(updates.latitude))) cleanUpdates.latitude = parseFloat(updates.latitude);
+    if (updates.longitude !== undefined && !isNaN(parseFloat(updates.longitude))) cleanUpdates.longitude = parseFloat(updates.longitude);
+    if (updates.location_name !== undefined || updates.locationName !== undefined) {
+      cleanUpdates.location_name = updates.location_name || updates.locationName;
+    }
+    if (updates.severity !== undefined) {
+      const s = updates.severity.toUpperCase();
+      cleanUpdates.severity = (s === 'UNVERIFIED') ? 'LOW' : s;
+    }
+    if (updates.status !== undefined) cleanUpdates.status = updates.status;
+    if (updates.title !== undefined) cleanUpdates.title = updates.title;
+
+    const { data, error } = await supabase
+      .from('disasters')
+      .update(cleanUpdates)
+      .eq('id', id)
       .select();
     if (error) throw error;
     return data && data.length > 0 ? data[0] : null;
@@ -207,6 +243,36 @@ const supabaseDb = {
   },
 
   // --- VOLUNTEERS ---
+  async getVolunteersStrict() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*, volunteers(id, skills, availability_status, helped_count, current_latitude, current_longitude)')
+      .eq('role', 'VOLUNTEER')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('getVolunteersStrict error:', error.message);
+      return this.getVolunteers();
+    }
+
+    return (data || []).map(u => {
+      const vArr = u.volunteers;
+      const v = (Array.isArray(vArr) && vArr.length > 0) ? vArr[0] : {};
+      return {
+        id: v.id || u.id,
+        userId: u.id,
+        name: u.name || 'Volunteer',
+        phone: u.phone || 'N/A',
+        role: u.role,
+        status: u.status,
+        skills: v.skills || 'General Relief',
+        availabilityStatus: v.availability_status || 'AVAILABLE',
+        helpedCount: v.helped_count || 0,
+        currentLatitude: v.current_latitude || 13.0827,
+        currentLongitude: v.current_longitude || 80.2707
+      };
+    });
+  },
   async createVolunteerProfile(profileData) {
     const { data, error } = await supabase
       .from('volunteers')

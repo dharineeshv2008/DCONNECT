@@ -1328,3 +1328,28 @@ input:-webkit-autofill:active {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* Badge Styles */
+.badge-unverified {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.badge-critical {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+/* Leaflet Map Controls Container */
+#locationPickerMap .leaflet-container {
+  font-family: inherit;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  #locationPickerMap {
+    height: 260px !important;
+  }
+}

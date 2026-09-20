@@ -107,7 +107,7 @@ module.exports = async (req, res) => {
         type: type,
         title: body.title || `${type} Emergency`,
         description: body.description || 'Emergency reported.',
-        severity: body.severity || 'MEDIUM',
+        severity: body.severity || 'UNVERIFIED',
         latitude: userLat,
         longitude: userLon,
         location_name: body.locationName || `Lat: ${userLat.toFixed(4)}, Lon: ${userLon.toFixed(4)}`,

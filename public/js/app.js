@@ -29,15 +29,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initSupabaseRealtime();
   restoreSession();
 
-  // Rule 8: Real-time 2s periodic polling sync
+  // Requirement 8: Real-time 10s periodic polling fallback sync
   setInterval(() => {
     if (currentUser && currentUser.approved) {
       const activeTab = document.querySelector('.tab-content.active');
       if (activeTab && activeTab.id === 'feedTab') {
         loadDisasters();
+      } else if (activeTab && activeTab.id === 'adminTab') {
+        loadAdminReportsTable();
       }
     }
-  }, 2000);
+  }, 10000);
 });
 
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
@@ -610,17 +612,14 @@ function handleDoubleConfirmStep1Continue() {
 
   const textInput = document.getElementById('doubleConfirmTextInput');
   const submitBtn = document.getElementById('doubleConfirmSubmitBtn');
-  if (textInput) textInput.value = '';
-  if (submitBtn) submitBtn.disabled = true;
-
-  if (textInput && !textInput.dataset.bound) {
-    textInput.dataset.bound = 'true';
-    textInput.addEventListener('input', (e) => {
+  if (textInput) {
+    textInput.value = '';
+    textInput.oninput = (e) => {
       const val = (e.target.value || '').trim();
-      const btn = document.getElementById('doubleConfirmSubmitBtn');
-      if (btn) btn.disabled = (val !== 'CONFIRM');
-    });
+      if (submitBtn) submitBtn.disabled = (val !== 'CONFIRM');
+    };
   }
+  if (submitBtn) submitBtn.disabled = true;
 
   openModal('doubleConfirmStep2Modal');
 }
@@ -651,7 +650,7 @@ async function handleDisasterSubmit(e) {
 
   const payload = {
     type: document.getElementById('reportDisasterType').value,
-    severity: document.getElementById('reportSeverity').value,
+    severity: 'UNVERIFIED',
     title: document.getElementById('reportTitle').value.trim(),
     locationName: document.getElementById('reportLocationName').value.trim(),
     latitude: parseFloat(document.getElementById('reportLatitude').value),
@@ -888,22 +887,30 @@ async function loadVolunteersDirectory() {
   if (!container) return;
 
   try {
-    const data = await fetchAPI(`/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
+    let data;
+    try {
+      data = await fetchAPI('/users/volunteers');
+    } catch (e) {
+      data = await fetchAPI(`/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
+    }
     const list = data.data || [];
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No available volunteers in the registry.</p>`;
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No registered volunteers found in directory.</p>`;
       return;
     }
 
     container.innerHTML = list.map(v => `
       <div style="border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <strong>👷 ${escapeHtml(v.name)}</strong> (${escapeHtml(v.phone)})
-          <div style="font-size: 0.8rem; color: var(--text-muted);">
-            Skills: ${escapeHtml(v.skills || 'General Relief')} | Missions Completed: <strong>${v.helpedCount}</strong>
+          <strong>🧑‍🚒 ${escapeHtml(v.name || 'Volunteer')}</strong>
+          <span class="badge badge-status-active" style="margin-left: 6px;">VOLUNTEER</span>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+            🛠️ Skills: ${escapeHtml(v.skills || 'General Relief')} | 📞 ${escapeHtml(v.phone || 'N/A')}
           </div>
         </div>
-        <span class="badge badge-status-active">${v.availabilityStatus}</span>
+        <div>
+          <span class="badge badge-${(v.availabilityStatus || 'AVAILABLE').toLowerCase() === 'available' ? 'low' : 'medium'}">${v.availabilityStatus || 'AVAILABLE'}</span>
+        </div>
       </div>
     `).join('');
   } catch (err) {
@@ -1200,10 +1207,11 @@ function renderAdminReportsTable() {
 
   tbody.innerHTML = pageRows.map(d => {
     const isCancelled = (d.status === 'CANCELLED_BY_ADMIN' || d.status === 'CANCELLED');
+    const severityVal = (d.severity || 'UNVERIFIED').toUpperCase();
     return `
       <tr>
         <td><strong>#${d.id}</strong></td>
-        <td><span class="badge badge-${(d.severity || 'medium').toLowerCase()}">${d.type}</span></td>
+        <td><span class="badge badge-${severityVal.toLowerCase()}">${d.type}</span></td>
         <td>📍 ${escapeHtml(d.locationName || 'N/A')}</td>
         <td><strong>${escapeHtml(d.createdByName)}</strong></td>
         <td><span class="badge badge-status-active">${escapeHtml(d.createdByRole || 'PUBLIC')}</span></td>
@@ -1215,12 +1223,21 @@ function renderAdminReportsTable() {
             <option value="CANCELLED_BY_ADMIN" ${isCancelled ? 'selected' : ''}>⚪ CANCELLED_BY_ADMIN</option>
           </select>
         </td>
-        <td><span class="badge badge-${(d.severity || 'medium').toLowerCase()}">${d.severity || 'MEDIUM'}</span></td>
+        <td>
+          <select class="admin-select-status" onchange="updateAdminInlineSeverity(${d.id}, this.value)">
+            <option value="UNVERIFIED" ${severityVal === 'UNVERIFIED' ? 'selected' : ''}>⚪ UNVERIFIED</option>
+            <option value="LOW" ${severityVal === 'LOW' ? 'selected' : ''}>🟢 LOW</option>
+            <option value="MEDIUM" ${severityVal === 'MEDIUM' ? 'selected' : ''}>🟡 MEDIUM</option>
+            <option value="HIGH" ${severityVal === 'HIGH' ? 'selected' : ''}>🟠 HIGH</option>
+            <option value="CRITICAL" ${severityVal === 'CRITICAL' ? 'selected' : ''}>🔴 CRITICAL</option>
+          </select>
+        </td>
         <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
         <td>
           <div style="display: flex; gap: 6px; align-items: center;">
+            <button class="btn btn-outline btn-sm" onclick="openAdminEditModal(${d.id})">✏️ Edit</button>
             <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬</button>
-            <button class="btn btn-danger btn-sm" onclick="promptDeleteIncident(${d.id}, '${escapeHtml(d.title)}')">🗑️ Delete</button>
+            <button class="btn btn-danger btn-sm" onclick="promptDeleteIncident(${d.id}, '${escapeHtml(d.title)}')">🗑️</button>
           </div>
         </td>
       </tr>
@@ -1250,6 +1267,172 @@ async function updateAdminInlineStatus(incidentId, newStatus) {
     showToast('Update Failed', err.message || 'Update failed. Try again.', 'error');
     loadAdminReportsTable();
   }
+}
+
+async function updateAdminInlineSeverity(incidentId, newSeverity) {
+  try {
+    await fetchAPI('/incidents/edit', {
+      method: 'POST',
+      body: { id: incidentId, severity: newSeverity }
+    });
+
+    showToast('Severity Updated', `Report #${incidentId} severity set to '${newSeverity}'`, 'success');
+
+    const item = adminReportsList.find(d => d.id === incidentId);
+    if (item) item.severity = newSeverity;
+    renderAdminReportsTable();
+  } catch (err) {
+    showToast('Update Failed', err.message || 'Failed to update severity.', 'error');
+    loadAdminReportsTable();
+  }
+}
+
+function openAdminEditModal(incidentId) {
+  const item = adminReportsList.find(d => d.id === incidentId);
+  if (!item) return;
+
+  document.getElementById('adminEditId').value = item.id;
+  document.getElementById('adminEditTitle').value = item.title || '';
+  document.getElementById('adminEditDescription').value = item.description || '';
+  document.getElementById('adminEditSeverity').value = (item.severity || 'UNVERIFIED').toUpperCase();
+  document.getElementById('adminEditStatus').value = (item.status === 'CANCELLED' ? 'CLOSED' : item.status) || 'VERIFIED_ACTIVE';
+  document.getElementById('adminEditLocationName').value = item.locationName || '';
+  document.getElementById('adminEditLatitude').value = item.latitude || 13.0827;
+  document.getElementById('adminEditLongitude').value = item.longitude || 80.2707;
+
+  openModal('adminEditIncidentModal');
+}
+
+async function submitAdminEditIncident(e) {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('adminEditId').value);
+  const title = document.getElementById('adminEditTitle').value.trim();
+  const description = document.getElementById('adminEditDescription').value.trim();
+  const severity = document.getElementById('adminEditSeverity').value;
+  const status = document.getElementById('adminEditStatus').value;
+  const locationName = document.getElementById('adminEditLocationName').value.trim();
+  const latitude = parseFloat(document.getElementById('adminEditLatitude').value);
+  const longitude = parseFloat(document.getElementById('adminEditLongitude').value);
+
+  try {
+    const data = await fetchAPI('/incidents/edit', {
+      method: 'POST',
+      body: { id, title, description, severity, status, locationName, latitude, longitude }
+    });
+
+    closeModal('adminEditIncidentModal');
+    showToast('Incident Updated', `Incident #${id} details updated successfully.`, 'success');
+
+    loadAdminReportsTable();
+    loadDisasters();
+  } catch (err) {
+    showToast('Edit Failed', err.message || 'Failed to update incident.', 'error');
+  }
+}
+
+// ==============================================================================
+// LEAFLET MAP LOCATION PICKER & REVERSE GEOCODING
+// ==============================================================================
+
+let locationPickerMap = null;
+let locationPickerMarker = null;
+let locationPickerContext = 'report';
+let selectedCoords = { lat: 13.0827, lng: 80.2707 };
+let selectedAddress = '';
+
+function openLocationPicker(context = 'report') {
+  locationPickerContext = context;
+  openModal('locationPickerModal');
+
+  let initLat = 13.0827;
+  let initLng = 80.2707;
+
+  if (context === 'report') {
+    const rLat = parseFloat(document.getElementById('reportLatitude')?.value);
+    const rLng = parseFloat(document.getElementById('reportLongitude')?.value);
+    if (!isNaN(rLat) && !isNaN(rLng)) { initLat = rLat; initLng = rLng; }
+  } else if (context === 'adminEdit') {
+    const aLat = parseFloat(document.getElementById('adminEditLatitude')?.value);
+    const aLng = parseFloat(document.getElementById('adminEditLongitude')?.value);
+    if (!isNaN(aLat) && !isNaN(aLng)) { initLat = aLat; initLng = aLng; }
+  }
+
+  selectedCoords = { lat: initLat, lng: initLng };
+  setTimeout(() => {
+    initLocationPickerMap(initLat, initLng);
+  }, 200);
+}
+
+function initLocationPickerMap(lat, lng) {
+  const mapContainer = document.getElementById('locationPickerMap');
+  if (!mapContainer || typeof L === 'undefined') return;
+
+  if (!locationPickerMap) {
+    locationPickerMap = L.map('locationPickerMap').setView([lat, lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(locationPickerMap);
+
+    locationPickerMarker = L.marker([lat, lng], { draggable: true }).addTo(locationPickerMap);
+
+    locationPickerMap.on('click', (e) => {
+      const clickedLat = e.latlng.lat;
+      const clickedLng = e.latlng.lng;
+      locationPickerMarker.setLatLng([clickedLat, clickedLng]);
+      updateLocationPickerSelection(clickedLat, clickedLng);
+    });
+
+    locationPickerMarker.on('dragend', () => {
+      const position = locationPickerMarker.getLatLng();
+      updateLocationPickerSelection(position.lat, position.lng);
+    });
+  } else {
+    locationPickerMap.setView([lat, lng], 14);
+    locationPickerMarker.setLatLng([lat, lng]);
+    locationPickerMap.invalidateSize();
+  }
+
+  updateLocationPickerSelection(lat, lng);
+}
+
+async function updateLocationPickerSelection(lat, lng) {
+  selectedCoords = { lat, lng };
+  document.getElementById('pickerCoordsDisplay').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  document.getElementById('pickerAddressDisplay').textContent = 'Resolving address via OpenStreetMap...';
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+    const data = await res.json();
+    if (data && data.display_name) {
+      selectedAddress = data.display_name;
+      document.getElementById('pickerAddressDisplay').textContent = selectedAddress;
+    } else {
+      selectedAddress = `Lat: ${lat.toFixed(4)}, Lon: ${lng.toFixed(4)}`;
+      document.getElementById('pickerAddressDisplay').textContent = selectedAddress;
+    }
+  } catch (err) {
+    selectedAddress = `Lat: ${lat.toFixed(4)}, Lon: ${lng.toFixed(4)}`;
+    document.getElementById('pickerAddressDisplay').textContent = selectedAddress;
+  }
+}
+
+function confirmLocationPickerSelection() {
+  if (locationPickerContext === 'report') {
+    if (document.getElementById('reportLatitude')) document.getElementById('reportLatitude').value = selectedCoords.lat.toFixed(6);
+    if (document.getElementById('reportLongitude')) document.getElementById('reportLongitude').value = selectedCoords.lng.toFixed(6);
+    if (document.getElementById('reportLocationName') && selectedAddress) {
+      document.getElementById('reportLocationName').value = selectedAddress;
+    }
+  } else if (locationPickerContext === 'adminEdit') {
+    if (document.getElementById('adminEditLatitude')) document.getElementById('adminEditLatitude').value = selectedCoords.lat.toFixed(6);
+    if (document.getElementById('adminEditLongitude')) document.getElementById('adminEditLongitude').value = selectedCoords.lng.toFixed(6);
+    if (document.getElementById('adminEditLocationName') && selectedAddress) {
+      document.getElementById('adminEditLocationName').value = selectedAddress;
+    }
+  }
+  closeModal('locationPickerModal');
+  showToast('Location Selected', `Coordinates set to ${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`, 'info');
 }
 
 function promptDeleteIncident(incidentId, title) {

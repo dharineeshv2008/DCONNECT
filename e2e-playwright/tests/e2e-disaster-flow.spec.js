@@ -84,7 +84,6 @@ test.describe('Disaster Management Full-Stack E2E Suite', () => {
 
     // Coordinates located ~0.2 km from downtown flood (13.0827, 80.2707)
     await page.locator('#reportDisasterType').selectOption('FLOOD');
-    await page.locator('#reportSeverity').selectOption('HIGH');
     await page.locator('#reportTitle').fill('Flash Floods near Riverside Lane');
     await page.locator('#reportLocationName').fill('Riverside Lane Sector 2');
     await page.locator('#reportLatitude').fill('13.0845');
