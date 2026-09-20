@@ -303,7 +303,7 @@ async function processTelegramUpdate(body) {
       return { success: false, error: 'Bad Request', message: 'Invalid callback data format' };
     }
 
-    const targetStatus = action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CANCELLED';
+    const targetStatus = action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CANCELLED_BY_ADMIN';
 
     try {
       let updatedRecord = null;

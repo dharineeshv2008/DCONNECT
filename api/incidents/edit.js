@@ -73,10 +73,17 @@ module.exports = async (req, res) => {
     }
 
     if (body.status !== undefined) {
-      const allowedStatuses = ['PENDING', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'CLOSED', 'CANCELLED_BY_ADMIN', 'CANCELLED', 'RESOLVED'];
+      const allowedStatuses = ['PENDING', 'PENDING_VERIFICATION', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'CLOSED', 'CANCELLED_BY_ADMIN', 'CANCELLED', 'RESOLVED'];
       let targetStatus = body.status;
-      if (targetStatus === 'CANCELLED' || targetStatus === 'CANCELLED_BY_ADMIN' || targetStatus === 'RESOLVED') {
-        targetStatus = 'CLOSED';
+      if (targetStatus === 'CANCELLED') {
+        targetStatus = 'CANCELLED_BY_ADMIN';
+      }
+      if (!allowedStatuses.includes(targetStatus)) {
+        return sendJson(res, 400, {
+          success: false,
+          error: 'Bad Request',
+          message: `Invalid status '${targetStatus}'.`
+        });
       }
       updates.status = targetStatus;
     }

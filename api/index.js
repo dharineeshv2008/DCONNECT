@@ -224,7 +224,38 @@ module.exports = async (req, res) => {
     if (method === 'POST' && (pathname === '/api/disasters/report' || pathname === '/api/incidents/report' || pathname === '/api/reports' || pathname === '/api/incidents/create')) {
       const userLat = parseFloat(body.latitude);
       const userLon = parseFloat(body.longitude);
-      const type = body.type;
+      const type = body.type || 'FLOOD';
+
+      // Task 4: Validate user before insert
+      let validUserId = null;
+      let reporterUser = null;
+      const rawUserId = body.reporterId || body.userId || body.created_by_user_id || body.createdById;
+
+      if (rawUserId !== undefined && rawUserId !== null && rawUserId !== '') {
+        const parsedId = parseInt(rawUserId);
+        if (isNaN(parsedId)) {
+          console.warn(`⚠️ [api/index Incident Create]: Invalid user ID provided: ${rawUserId}`);
+          return sendJson(res, 401, {
+            success: false,
+            error: 'Unauthorized',
+            message: 'User session invalid. Please login again.'
+          });
+        }
+
+        // SELECT id FROM users WHERE id = user.id
+        reporterUser = await supabaseDb.getUserById(parsedId);
+        if (!reporterUser) {
+          console.error(`❌ [api/index Incident Create Error]: User ID ${parsedId} not found in users table.`);
+          return sendJson(res, 401, {
+            success: false,
+            error: 'Unauthorized',
+            message: 'User session invalid. Please login again.'
+          });
+        }
+
+        validUserId = reporterUser.id;
+        console.log(`👤 [api/index Incident Create]: Validated user ID ${validUserId} (${reporterUser.name}, ${reporterUser.role}) before insert.`);
+      }
 
       const candidates = await supabaseDb.getCandidateDisastersForMerge(type);
       let targetDisaster = null;
@@ -247,9 +278,9 @@ module.exports = async (req, res) => {
 
         await supabaseDb.createReport({
           disaster_id: targetDisaster.id,
-          reporter_id: body.reporterId || null,
-          reporter_name: body.reporterName || 'Anonymous Citizen',
-          reporter_phone: body.reporterPhone || 'N/A',
+          reporter_id: validUserId,
+          reporter_name: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen'),
+          reporter_phone: reporterUser ? reporterUser.phone : (body.reporterPhone || 'N/A'),
           latitude: userLat,
           longitude: userLon,
           message: body.description || 'Incident report'
@@ -261,32 +292,32 @@ module.exports = async (req, res) => {
           data: { ...targetDisaster, reportCount: updatedCount, wasMerged: true }
         });
       } else {
-        let initialStatus = 'PENDING';
-        if (body.reporterId) {
-          const reporter = await supabaseDb.getUserById(body.reporterId);
-          if (reporter && ['ADMIN', 'GOVERNMENT_AGENCY', 'NGO'].includes(reporter.role)) {
-            initialStatus = 'VERIFIED_ACTIVE';
-          }
+        const roleStr = (reporterUser ? reporterUser.role : (body.role || body.userRole || '')).toUpperCase();
+        let initialStatus = 'PENDING_VERIFICATION';
+        if (['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY', 'NGO'].includes(roleStr)) {
+          initialStatus = 'VERIFIED_ACTIVE';
         }
+
+        console.log(`👤 [api/index Incident Create]: Inserting disaster with created_by_user_id = ${validUserId}, role = ${roleStr || 'CITIZEN'}, initialStatus = ${initialStatus}`);
 
         const newDisaster = await supabaseDb.createDisaster({
           type: type,
-          title: body.title,
-          description: body.description,
+          title: body.title || `${type} Emergency`,
+          description: body.description || 'Emergency reported.',
           severity: body.severity || 'UNVERIFIED',
           latitude: userLat,
           longitude: userLon,
           location_name: body.locationName || `Lat: ${userLat.toFixed(4)}, Lon: ${userLon.toFixed(4)}`,
           status: initialStatus,
           report_count: 1,
-          created_by_user_id: body.reporterId || null
+          created_by_user_id: validUserId
         });
 
         await supabaseDb.createReport({
           disaster_id: newDisaster.id,
-          reporter_id: body.reporterId || null,
-          reporter_name: body.reporterName || 'Anonymous Citizen',
-          reporter_phone: body.reporterPhone || 'N/A',
+          reporter_id: validUserId,
+          reporter_name: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen'),
+          reporter_phone: reporterUser ? reporterUser.phone : (body.reporterPhone || 'N/A'),
           latitude: userLat,
           longitude: userLon,
           message: body.description
@@ -295,12 +326,12 @@ module.exports = async (req, res) => {
         // Trigger Telegram Admin Notification
         sendAdminIncidentNotification({
           ...newDisaster,
-          createdByName: body.reporterName || 'Anonymous Citizen'
+          createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
         }).catch(err => console.warn('Telegram notification warning:', err.message));
 
         return sendJson(res, 201, {
           success: true,
-          message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster published to live pipeline.' : 'Citizen report submitted.',
+          message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster published to live pipeline.' : 'Citizen report submitted. Awaiting Admin verification.',
           data: { ...newDisaster, reportCount: 1, wasMerged: false }
         });
       }
@@ -330,11 +361,32 @@ module.exports = async (req, res) => {
       if (statusInput === 'In Progress') dbStatus = 'IN_PROGRESS';
       if (statusInput === 'Completed') dbStatus = 'RESOLVED';
       if (statusInput === 'Closed') dbStatus = 'CLOSED';
-      if (statusInput === 'Cancelled by Admin' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'CANCELLED') dbStatus = 'CLOSED';
+      if (statusInput === 'Cancelled by Admin' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'CANCELLED') dbStatus = 'CANCELLED_BY_ADMIN';
 
-      const ALLOWED_DB_STATUSES = ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'PENDING'];
+      const ALLOWED_DB_STATUSES = ['PENDING_VERIFICATION', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN', 'PENDING'];
       if (!ALLOWED_DB_STATUSES.includes(dbStatus)) {
-        return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Invalid status '${statusInput}'.` });
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Invalid status '${statusInput}'. Allowed: PENDING_VERIFICATION, VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED, CANCELLED_BY_ADMIN.` });
+      }
+
+      // Mandatory transition validation
+      const c = (existing.status || 'PENDING_VERIFICATION').toUpperCase();
+      const t = dbStatus;
+      const allowedTransitions = {
+        'PENDING': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
+        'PENDING_VERIFICATION': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
+        'VERIFIED_ACTIVE': ['IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
+        'IN_PROGRESS': ['RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
+        'RESOLVED': ['CLOSED', 'CANCELLED_BY_ADMIN'],
+        'CLOSED': ['CANCELLED_BY_ADMIN'],
+        'CANCELLED_BY_ADMIN': ['CLOSED']
+      };
+
+      if (c !== t && allowedTransitions[c] && !allowedTransitions[c].includes(t)) {
+        return sendJson(res, 400, {
+          success: false,
+          error: 'Invalid State Transition',
+          message: `Cannot transition incident #${incidentId} status from '${existing.status}' to '${dbStatus}'.`
+        });
       }
 
       const updated = await supabaseDb.updateDisaster(incidentId, {
@@ -432,13 +484,33 @@ module.exports = async (req, res) => {
     }
 
     if (method === 'POST' && (pathname === '/api/volunteers/assignments' || pathname === '/api/assignments')) {
+      let userRole = (body.userRole || body.role || '').toUpperCase();
+      const assignedByUserId = body.assignedById || body.assigned_by_user_id || body.userId;
+
+      if (assignedByUserId) {
+        const parsedUserId = parseInt(assignedByUserId);
+        if (!isNaN(parsedUserId)) {
+          const assigner = await supabaseDb.getUserById(parsedUserId);
+          if (assigner) userRole = (assigner.role || '').toUpperCase();
+        }
+      }
+
+      const allowedRoles = ['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY', 'NGO'];
+      if (!userRole || !allowedRoles.includes(userRole)) {
+        return sendJson(res, 403, {
+          success: false,
+          error: 'Forbidden',
+          message: 'Not allowed to assign tasks'
+        });
+      }
+
       const newAssign = await supabaseDb.createAssignment({
         disaster_id: body.disasterId || 1,
         volunteer_id: body.volunteerId || 2,
         task_title: body.taskTitle || 'Relief Mission',
         task_description: body.taskDescription || 'Assist field rescue teams.',
         status: 'ASSIGNED',
-        assigned_by_user_id: body.assignedById || null
+        assigned_by_user_id: assignedByUserId || null
       });
 
       return sendJson(res, 201, { success: true, message: 'Mission dispatched!', data: newAssign });

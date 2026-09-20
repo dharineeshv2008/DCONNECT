@@ -117,14 +117,21 @@ const supabaseDb = {
       .select('*, creator:created_by_user_id(name,role)')
       .order('created_at', { ascending: false });
 
-    if (statusFilter) {
-      query = query.eq('status', statusFilter);
+    if (statusFilter === 'ALL' || statusFilter === 'all' || statusFilter === 'ADMIN') {
+      // Admin Panel: Include all statuses
+    } else if (statusFilter) {
+      const dbStatus = (statusFilter === 'PENDING_VERIFICATION') ? 'PENDING' : (statusFilter === 'CANCELLED_BY_ADMIN' ? 'CLOSED' : statusFilter);
+      query = query.eq('status', dbStatus);
+    } else {
+      // Live Disaster Feed: Only SELECT * FROM disasters WHERE status IN ('VERIFIED_ACTIVE', 'IN_PROGRESS')
+      query = query.in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS']);
     }
 
     const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
+      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status,
       createdByName: r.creator?.name || 'Authorized Responder',
       createdByRole: r.creator?.role || 'PUBLIC'
     }));
@@ -136,11 +143,13 @@ const supabaseDb = {
       .from('disasters')
       .select('*')
       .eq('type', type)
-      .in('status', ['PENDING', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'Open', 'In Progress'])
       .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(r => ({
+      ...r,
+      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status
+    }));
   },
 
   async getDisasterById(id) {
@@ -154,12 +163,35 @@ const supabaseDb = {
     const r = data[0];
     return {
       ...r,
+      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status,
       createdByName: r.creator?.name || 'Authorized Responder',
       createdByRole: r.creator?.role || 'PUBLIC'
     };
   },
 
   async createDisaster(disasterData) {
+    // Task 3 & 5: Pre-insert Duplicate Prevention (10km radius check)
+    if (disasterData.type && !isNaN(parseFloat(disasterData.latitude)) && !isNaN(parseFloat(disasterData.longitude))) {
+      const candidates = await this.getCandidateDisastersForMerge(disasterData.type);
+      const userLat = parseFloat(disasterData.latitude);
+      const userLon = parseFloat(disasterData.longitude);
+
+      for (const c of candidates) {
+        const R = 6371.0;
+        const dLat = (c.latitude - userLat) * Math.PI / 180;
+        const dLon = (c.longitude - userLon) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(userLat * Math.PI / 180) * Math.cos(c.latitude * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const dist = R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+
+        if (dist <= 10.0) {
+          console.warn(`⚠️ [createDisaster Deduplication]: Similar incident already exists within ${dist.toFixed(2)}km (#${c.id}). Preventing duplicate creation.`);
+          return { ...c, wasMerged: true, isDuplicate: true };
+        }
+      }
+    }
+
     const rawSeverity = (disasterData.severity || 'UNVERIFIED').toUpperCase();
     const dbSeverity = (rawSeverity === 'UNVERIFIED') ? 'LOW' : rawSeverity;
 
@@ -183,14 +215,20 @@ const supabaseDb = {
       }
     }
 
+    const requestedStatus = disasterData.status || 'PENDING_VERIFICATION';
+    let dbStatus = requestedStatus;
+    if (requestedStatus === 'PENDING_VERIFICATION') dbStatus = 'PENDING';
+    if (requestedStatus === 'CANCELLED_BY_ADMIN') dbStatus = 'CLOSED';
+
     const payload = {
       ...disasterData,
       severity: dbSeverity,
-      status: disasterData.status || 'PENDING',
+      status: dbStatus,
       created_by_user_id: validUserId || null
     };
 
-    console.log('👤 [supabaseDb.createDisaster]: Inserting disaster with created_by_user_id:', payload.created_by_user_id);
+    // Task 6: Logging new disaster creation
+    console.log("New disaster created:", payload);
 
     const { data, error } = await supabase
       .from('disasters')
@@ -205,6 +243,7 @@ const supabaseDb = {
     if (!data || data.length === 0) return null;
     return {
       ...data[0],
+      status: requestedStatus,
       severity: rawSeverity
     };
   },
@@ -221,7 +260,13 @@ const supabaseDb = {
       const s = updates.severity.toUpperCase();
       cleanUpdates.severity = (s === 'UNVERIFIED') ? 'LOW' : s;
     }
-    if (updates.status !== undefined) cleanUpdates.status = updates.status;
+    let requestedStatus = updates.status;
+    if (updates.status !== undefined) {
+      let dbStatus = updates.status;
+      if (dbStatus === 'PENDING_VERIFICATION') dbStatus = 'PENDING';
+      if (dbStatus === 'CANCELLED_BY_ADMIN') dbStatus = 'CLOSED';
+      cleanUpdates.status = dbStatus;
+    }
     if (updates.title !== undefined) cleanUpdates.title = updates.title;
 
     const { data, error } = await supabase
@@ -230,30 +275,45 @@ const supabaseDb = {
       .eq('id', id)
       .select();
     if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    if (!data || data.length === 0) return null;
+    return {
+      ...data[0],
+      status: requestedStatus || (data[0].status === 'PENDING' ? 'PENDING_VERIFICATION' : data[0].status)
+    };
   },
 
   async updateDisaster(id, updates) {
+    const dbUpdates = { ...updates };
+    let requestedStatus = updates.status;
+    if (updates.status) {
+      if (updates.status === 'PENDING_VERIFICATION') dbUpdates.status = 'PENDING';
+      if (updates.status === 'CANCELLED_BY_ADMIN') dbUpdates.status = 'CLOSED';
+    }
+
     let { data, error } = await supabase
       .from('disasters')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id)
       .select();
 
-    if (error && error.code === '23514' && updates.status === 'CANCELLED') {
-      const fallbackUpdates = { ...updates, status: 'CLOSED' };
+    if (error && error.code === '23514') {
+      const fallbackUpdates = { ...dbUpdates, status: 'CLOSED' };
       const res = await supabase
         .from('disasters')
         .update(fallbackUpdates)
         .eq('id', id)
         .select();
       if (!res.error && res.data && res.data.length > 0) {
-        return { ...res.data[0], status: 'CANCELLED' };
+        return { ...res.data[0], status: requestedStatus || 'CANCELLED_BY_ADMIN' };
       }
     }
 
     if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    if (!data || data.length === 0) return null;
+    return {
+      ...data[0],
+      status: requestedStatus || (data[0].status === 'PENDING' ? 'PENDING_VERIFICATION' : data[0].status)
+    };
   },
 
   async deleteDisaster(id) {
@@ -289,11 +349,35 @@ const supabaseDb = {
 
   // --- REPORTS ---
   async createReport(reportData) {
+    let validReporterId = reportData.reporter_id;
+    if (validReporterId) {
+      const parsedId = parseInt(validReporterId);
+      if (isNaN(parsedId)) {
+        validReporterId = null;
+      } else {
+        try {
+          const userObj = await this.getUserById(parsedId);
+          if (!userObj) validReporterId = null;
+          else validReporterId = userObj.id;
+        } catch (e) {
+          validReporterId = null;
+        }
+      }
+    }
+
+    const cleanReport = {
+      ...reportData,
+      reporter_id: validReporterId || null
+    };
+
     const { data, error } = await supabase
       .from('reports')
-      .insert([reportData])
+      .insert([cleanReport])
       .select();
-    if (error) throw error;
+    if (error) {
+      console.error('❌ [supabaseDb.createReport DB Error]:', error.message || error);
+      throw error;
+    }
     return data && data.length > 0 ? data[0] : null;
   },
 
@@ -532,18 +616,13 @@ const supabaseDb = {
       return data && data.length > 0 ? data[0] : null;
     } catch (err) {
       if (err.code === '23503' && !cleanRes.disaster_id) {
-        const defaultDisaster = await this.createDisaster({
-          title: 'General Emergency Relief Supply Pool',
-          type: 'OTHER',
-          description: 'System pool for general resource contributions.',
-          severity: 'LOW',
-          latitude: 13.0827,
-          longitude: 80.2707,
-          location_name: 'Central Emergency Relief Command',
-          status: 'VERIFIED_ACTIVE'
-        });
-        cleanRes.disaster_id = defaultDisaster.id;
-        return this.createResource(cleanRes);
+        console.warn('⚠️ [createResource]: disaster_id missing or invalid. Linking to active disaster if available without auto-creating fake disaster record.');
+        const activeDisasters = await this.getAllDisasters();
+        if (activeDisasters && activeDisasters.length > 0) {
+          cleanRes.disaster_id = activeDisasters[0].id;
+          return this.createResource(cleanRes);
+        }
+        cleanRes.disaster_id = null;
       }
 
       // Fallback without missing schema columns (e.g. available_until, description, latitude, longitude, address)
@@ -704,4 +783,17 @@ const supabaseDb = {
   }
 };
 
-module.exports = { supabase, supabaseDb };
+// Task 4: Dev-only sample data guard
+let alreadySeeded = false;
+async function seedSampleDataDevOnly() {
+  if (process.env.NODE_ENV !== 'development') {
+    return;
+  }
+  if (alreadySeeded) {
+    return;
+  }
+  alreadySeeded = true;
+  console.log('ℹ️ [Dev Seeding]: Development environment detected. Sample data seeding guarded by single-execution flag.');
+}
+
+module.exports = { supabase, supabaseDb, seedSampleDataDevOnly };

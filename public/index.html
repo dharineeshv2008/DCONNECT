@@ -556,11 +556,12 @@
             <label>Status</label>
             <select id="adminStatusFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
               <option value="">All Statuses</option>
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION</option>
               <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE</option>
               <option value="IN_PROGRESS">🟡 IN_PROGRESS</option>
+              <option value="RESOLVED">🟢 RESOLVED</option>
               <option value="CLOSED">📁 CLOSED</option>
               <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN</option>
-              <option value="PENDING">⚠️ PENDING</option>
             </select>
           </div>
           <div class="admin-filter-group">
@@ -800,12 +801,14 @@
         </div>
         <div class="form-group">
           <label>Select Operational Status *</label>
-          <select id="statusModalSelect" class="form-control" required style="font-weight: 700; padding: 10px; cursor: pointer;">
-            <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed Disaster)</option>
-            <option value="IN_PROGRESS">🟡 IN_PROGRESS (Relief Operations Active)</option>
-            <option value="CLOSED">📁 CLOSED (Incident Resolved & Archived)</option>
-            <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN (Cancelled / False Alarm)</option>
-          </select>
+            <select id="statusModalSelect" class="form-control" required style="font-weight: 700; padding: 10px; cursor: pointer;">
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION (Awaiting Admin Verification)</option>
+              <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed Disaster)</option>
+              <option value="IN_PROGRESS">🟡 IN_PROGRESS (Relief Operations Active)</option>
+              <option value="RESOLVED">🟢 RESOLVED (Relief Operations Completed)</option>
+              <option value="CLOSED">📁 CLOSED (Incident Resolved & Archived)</option>
+              <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN (Cancelled / False Alarm)</option>
+            </select>
         </div>
         <button type="submit" id="statusUpdateSubmitBtn" class="btn btn-primary btn-block">Update Status</button>
       </form>
@@ -925,8 +928,10 @@
           <div class="form-group">
             <label>Status *</label>
             <select id="adminEditStatus" class="form-control" required>
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION</option>
               <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE</option>
               <option value="IN_PROGRESS">🟡 IN_PROGRESS</option>
+              <option value="RESOLVED">🟢 RESOLVED</option>
               <option value="CLOSED">📁 CLOSED</option>
               <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN</option>
             </select>

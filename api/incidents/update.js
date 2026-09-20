@@ -5,14 +5,33 @@
 
 const { supabaseDb } = require('../../supabaseClient');
 
-// Allowed status values per Supabase 'disasters_status_check' constraint
 const ALLOWED_DB_STATUSES = [
+  'PENDING_VERIFICATION',
   'VERIFIED_ACTIVE',
   'IN_PROGRESS',
   'RESOLVED',
   'CLOSED',
+  'CANCELLED_BY_ADMIN',
   'PENDING'
 ];
+
+function isValidStatusTransition(currentStatus, targetStatus) {
+  const c = (currentStatus || 'PENDING_VERIFICATION').toUpperCase();
+  const t = (targetStatus || '').toUpperCase();
+  if (c === t) return true;
+
+  const allowedTransitions = {
+    'PENDING': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
+    'PENDING_VERIFICATION': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
+    'VERIFIED_ACTIVE': ['IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
+    'IN_PROGRESS': ['RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
+    'RESOLVED': ['CLOSED', 'CANCELLED_BY_ADMIN'],
+    'CLOSED': ['CANCELLED_BY_ADMIN'],
+    'CANCELLED_BY_ADMIN': ['CLOSED']
+  };
+
+  return allowedTransitions[c] ? allowedTransitions[c].includes(t) : true;
+}
 
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
@@ -80,7 +99,7 @@ module.exports = async (req, res) => {
     if (rawStatus === 'Completed') dbStatus = 'RESOLVED';
     if (rawStatus === 'Closed') dbStatus = 'CLOSED';
     if (rawStatus === 'Cancelled by Admin' || rawStatus === 'CANCELLED_BY_ADMIN' || rawStatus === 'CANCELLED') {
-      dbStatus = 'CLOSED';
+      dbStatus = 'CANCELLED_BY_ADMIN';
     }
 
     // Strict validation against PostgreSQL disasters_status_check
@@ -88,7 +107,16 @@ module.exports = async (req, res) => {
       return sendJson(res, 400, {
         success: false,
         error: 'Bad Request',
-        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED, PENDING.`
+        message: `Invalid status '${rawStatus}'. Allowed values: PENDING_VERIFICATION, VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED, CANCELLED_BY_ADMIN.`
+      });
+    }
+
+    // MANDATORY BACKEND VALIDATION: Enforce valid status transition
+    if (!isValidStatusTransition(existing.status, dbStatus)) {
+      return sendJson(res, 400, {
+        success: false,
+        error: 'Invalid State Transition',
+        message: `Cannot transition incident #${incidentId} status from '${existing.status}' to '${dbStatus}'.`
       });
     }
 

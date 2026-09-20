@@ -706,13 +706,24 @@ input:-webkit-autofill:active {
 }
 
 .badge-status-closed,
-.badge-status-cancelled {
+.badge-status-cancelled,
+.badge-status-cancelled_by_admin,
+.badge-status-cancelledbyadmin {
   background: #f1f5f9;
   color: #64748b;
   border: 1px solid #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-status-cancelled_by_admin::before,
+.badge-status-cancelledbyadmin::before {
+  content: "⚪";
 }
 
-.badge-status-pending {
+.badge-status-pending,
+.badge-status-pending_verification,
+.badge-status-pendingverification {
   background: #fef3c7;
   color: #b45309;
   border: 1px solid #fcd34d;
@@ -720,8 +731,30 @@ input:-webkit-autofill:active {
   align-items: center;
   gap: 4px;
 }
-.badge-status-pending::before {
-  content: "⚠️";
+.badge-status-pending::before,
+.badge-status-pending_verification::before,
+.badge-status-pendingverification::before {
+  content: "⏳";
+}
+
+.disaster-card-disabled {
+  opacity: 0.65;
+  filter: grayscale(0.2);
+  background-color: #f8fafc;
+}
+
+.pending-approval-banner {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px dashed #fcd34d;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .badge-status-assigned {

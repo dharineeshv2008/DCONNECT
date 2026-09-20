@@ -242,6 +242,12 @@ function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
     return;
   }
 
+  if (err && (err.status === 401 || err.message?.includes('User session invalid') || err.message?.includes('Please login again'))) {
+    showToast('Session Invalid', 'User session invalid. Please login again.', 'error');
+    logout();
+    return;
+  }
+
   if (err && err.status === 403 && (err.data?.error === 'Account Pending Approval' || err.message?.includes('approved by the Administrator'))) {
     showPendingApprovalView();
     return;
@@ -724,6 +730,11 @@ async function executeDisasterSubmit(payload) {
     populateFormCoords(currentCoords.latitude, currentCoords.longitude);
     loadDisasters();
   } catch (err) {
+    if (err && (err.status === 401 || err.message?.includes('User session invalid') || err.message?.includes('Please login again'))) {
+      showToast('Session Error', 'User session invalid. Please login again.', 'error');
+      logout();
+      return;
+    }
     showToast('Submission Failed', err.message || 'Update failed. Try again.', 'error');
   }
 }
@@ -741,6 +752,10 @@ async function loadDisasters() {
   try {
     const data = await fetchAPI(url);
     let list = data.data || [];
+
+    // Requirement 1 & 7: Filter logic & safety check - only include active real-time incidents
+    list = list.filter(d => d.status === 'VERIFIED_ACTIVE' || d.status === 'IN_PROGRESS');
+
     if (typeFilter) {
       list = list.filter(d => d.type === typeFilter);
     }
@@ -754,12 +769,35 @@ async function loadDisasters() {
     });
 
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 30px;">No disaster incidents match your current filter.</p>`;
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 30px; font-weight: 600;">No active disasters currently</p>`;
       return;
     }
 
-    container.innerHTML = list.map(d => `
-      <div class="disaster-card">
+    container.innerHTML = list.map(d => {
+      const statusStr = (d.status || 'PENDING_VERIFICATION').toUpperCase();
+      const isPending = statusStr === 'PENDING_VERIFICATION' || statusStr === 'PENDING';
+      const isVerified = statusStr === 'VERIFIED_ACTIVE';
+      const isInProgress = statusStr === 'IN_PROGRESS';
+      const isResolved = statusStr === 'RESOLVED';
+      const isClosed = statusStr === 'CLOSED' || statusStr === 'CANCELLED_BY_ADMIN' || statusStr === 'CANCELLED';
+
+      let borderStyle = 'border-left: 4px solid var(--border-color);';
+      if (isVerified) borderStyle = 'border-left: 4px solid #16a34a;';
+      if (isInProgress) borderStyle = 'border-left: 4px solid #0284c7;';
+      if (isResolved) borderStyle = 'border-left: 4px solid #0d9488;';
+      if (isClosed) borderStyle = 'border-left: 4px solid #94a3b8;';
+      if (isPending) borderStyle = 'border-left: 4px solid #eab308;';
+
+      const userRole = currentUser ? (currentUser.role || '').toUpperCase() : '';
+      const canAssign = ['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY', 'NGO'].includes(userRole) && !isPending && !isResolved && !isClosed;
+      const canUpdateStatus = (currentUser?.role === 'ADMIN' || currentUser?.role === 'GOVERNMENT_AGENCY' || currentUser?.role === 'GOVERNMENT') && !isClosed;
+      const canDiscuss = !isPending && !isClosed;
+
+      let cardClass = "disaster-card";
+      if (isClosed) cardClass += " disaster-card-disabled";
+
+      return `
+      <div class="${cardClass}" style="${borderStyle}">
         <div class="disaster-card-header">
           <div>
             <div class="disaster-title">
@@ -774,26 +812,39 @@ async function loadDisasters() {
           </div>
           <div style="display: flex; gap: 6px; align-items: center;">
             <span class="badge badge-${d.severity.toLowerCase()}">${d.severity}</span>
-            <span class="badge badge-status-${d.status.toLowerCase().replace('_', '')}">${d.status}</span>
+            <span class="badge badge-status-${d.status.toLowerCase()}">${d.status}</span>
           </div>
         </div>
 
         <p class="disaster-desc">${escapeHtml(d.description)}</p>
+
+        ${isPending ? `
+          <div class="pending-approval-banner">
+            ⏳ Waiting for admin approval. Actions are locked until verified.
+          </div>
+        ` : ''}
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
           <div>
             <span class="merge-tag">📊 Aggregated Reports: ${d.reportCount}</span>
           </div>
           <div style="display: flex; gap: 8px;">
-            <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬 Discussion</button>
-            <button class="btn btn-secondary btn-sm" onclick="openAssignTaskModal(${d.id})">🎯 Assign Task</button>
-            ${currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'GOVERNMENT_AGENCY') ? `
+            ${canDiscuss ? `
+              <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬 Discussion</button>
+            ` : (isPending ? `<button class="btn btn-outline btn-sm" disabled style="opacity: 0.5; cursor: not-allowed;">💬 Discussion (Locked)</button>` : '')}
+            
+            ${canAssign ? `
+              <button class="btn btn-secondary btn-sm" onclick="openAssignTaskModal(${d.id})">🎯 Assign Task</button>
+            ` : ''}
+            
+            ${canUpdateStatus ? `
               <button class="btn btn-outline btn-sm" onclick="openStatusUpdateModal(${d.id}, '${escapeHtml(d.title)}', '${d.status}')">⚙️ Update Status</button>
             ` : ''}
           </div>
         </div>
       </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (err) {
     handleApiError(err);
   }
@@ -948,6 +999,14 @@ async function loadVolunteersDirectory() {
 }
 
 async function openAssignTaskModal(disasterId) {
+  const allowedRoles = ['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY', 'NGO'];
+  const userRole = currentUser ? (currentUser.role || '').toUpperCase() : '';
+
+  if (!allowedRoles.includes(userRole)) {
+    showToast('Forbidden', 'Not allowed to assign tasks', 'error');
+    return;
+  }
+
   document.getElementById('assignDisasterId').value = disasterId;
   const select = document.getElementById('assignVolunteerSelect');
   select.innerHTML = '<option value="">Loading volunteers...</option>';
@@ -1434,7 +1493,7 @@ async function loadAdminAnalytics() {
 
 async function loadAdminReportsTable() {
   try {
-    const data = await fetchAPI('/incidents/list');
+    const data = await fetchAPI('/incidents/list?status=ALL');
     adminReportsList = data.data || [];
     renderAdminReportsTable();
   } catch (err) {
@@ -1511,6 +1570,7 @@ function renderAdminReportsTable() {
   }
 
   tbody.innerHTML = pageRows.map(d => {
+    const isPending = (d.status === 'PENDING_VERIFICATION' || d.status === 'PENDING');
     const isCancelled = (d.status === 'CANCELLED_BY_ADMIN' || d.status === 'CANCELLED');
     const severityVal = (d.severity || 'UNVERIFIED').toUpperCase();
     return `
@@ -1522,8 +1582,10 @@ function renderAdminReportsTable() {
         <td><span class="badge badge-status-active">${escapeHtml(d.createdByRole || 'PUBLIC')}</span></td>
         <td>
           <select class="admin-select-status" onchange="updateAdminInlineStatus(${d.id}, this.value)">
+            <option value="PENDING_VERIFICATION" ${isPending ? 'selected' : ''}>⏳ PENDING_VERIFICATION</option>
             <option value="VERIFIED_ACTIVE" ${d.status === 'VERIFIED_ACTIVE' ? 'selected' : ''}>🛡️ VERIFIED_ACTIVE</option>
             <option value="IN_PROGRESS" ${d.status === 'IN_PROGRESS' ? 'selected' : ''}>🟡 IN_PROGRESS</option>
+            <option value="RESOLVED" ${d.status === 'RESOLVED' ? 'selected' : ''}>🟢 RESOLVED</option>
             <option value="CLOSED" ${d.status === 'CLOSED' ? 'selected' : ''}>📁 CLOSED</option>
             <option value="CANCELLED_BY_ADMIN" ${isCancelled ? 'selected' : ''}>⚪ CANCELLED_BY_ADMIN</option>
           </select>
@@ -1539,7 +1601,11 @@ function renderAdminReportsTable() {
         </td>
         <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
         <td>
-          <div style="display: flex; gap: 6px; align-items: center;">
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            ${isPending ? `
+              <button class="btn btn-success btn-sm" onclick="updateAdminInlineStatus(${d.id}, 'VERIFIED_ACTIVE')" title="Verify & Publish">✅ Verify & Publish</button>
+              <button class="btn btn-danger btn-sm" onclick="updateAdminInlineStatus(${d.id}, 'CANCELLED_BY_ADMIN')" title="Reject Report">❌ Reject</button>
+            ` : ''}
             <button class="btn btn-outline btn-sm" onclick="openAdminEditModal(${d.id})">✏️ Edit</button>
             <button class="btn btn-outline btn-sm" onclick="openDiscussionModal(${d.id}, '${escapeHtml(d.title)}')">💬</button>
             <button class="btn btn-danger btn-sm" onclick="promptDeleteIncident(${d.id}, '${escapeHtml(d.title)}')">🗑️</button>
@@ -1601,7 +1667,7 @@ function openAdminEditModal(incidentId) {
   document.getElementById('adminEditTitle').value = item.title || '';
   document.getElementById('adminEditDescription').value = item.description || '';
   document.getElementById('adminEditSeverity').value = (item.severity || 'UNVERIFIED').toUpperCase();
-  document.getElementById('adminEditStatus').value = (item.status === 'CANCELLED' ? 'CLOSED' : item.status) || 'VERIFIED_ACTIVE';
+  document.getElementById('adminEditStatus').value = (item.status === 'CANCELLED' ? 'CANCELLED_BY_ADMIN' : item.status) || 'PENDING_VERIFICATION';
   document.getElementById('adminEditLocationName').value = item.locationName || '';
   document.getElementById('adminEditLatitude').value = item.latitude || 13.0827;
   document.getElementById('adminEditLongitude').value = item.longitude || 80.2707;

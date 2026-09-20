@@ -60,6 +60,37 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Task 4: Validate user before insert
+    let validUserId = null;
+    let reporterUser = null;
+    const rawUserId = body.reporterId || body.userId || body.created_by_user_id || body.createdById;
+
+    if (rawUserId !== undefined && rawUserId !== null && rawUserId !== '') {
+      const parsedId = parseInt(rawUserId);
+      if (isNaN(parsedId)) {
+        console.warn(`⚠️ [Incident Create]: Invalid user ID provided: ${rawUserId}`);
+        return sendJson(res, 401, {
+          success: false,
+          error: 'Unauthorized',
+          message: 'User session invalid. Please login again.'
+        });
+      }
+
+      // SELECT id FROM users WHERE id = user.id
+      reporterUser = await supabaseDb.getUserById(parsedId);
+      if (!reporterUser) {
+        console.error(`❌ [Incident Create Error]: User ID ${parsedId} not found in users table.`);
+        return sendJson(res, 401, {
+          success: false,
+          error: 'Unauthorized',
+          message: 'User session invalid. Please login again.'
+        });
+      }
+
+      validUserId = reporterUser.id;
+      console.log(`👤 [Incident Create]: Validated user ID ${validUserId} (${reporterUser.name}, ${reporterUser.role}) before insert.`);
+    }
+
     // Deduplication check using 10km Haversine distance
     const candidates = await supabaseDb.getCandidateDisastersForMerge(type);
     let targetDisaster = null;
@@ -82,9 +113,9 @@ module.exports = async (req, res) => {
 
       await supabaseDb.createReport({
         disaster_id: targetDisaster.id,
-        reporter_id: body.reporterId || null,
-        reporter_name: body.reporterName || 'Anonymous Citizen',
-        reporter_phone: body.reporterPhone || 'N/A',
+        reporter_id: validUserId,
+        reporter_name: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen'),
+        reporter_phone: reporterUser ? reporterUser.phone : (body.reporterPhone || 'N/A'),
         latitude: userLat,
         longitude: userLon,
         message: body.description || 'Incident report'
@@ -96,13 +127,13 @@ module.exports = async (req, res) => {
         data: { ...targetDisaster, reportCount: updatedCount, wasMerged: true }
       });
     } else {
-      let initialStatus = 'PENDING';
-      if (body.reporterId) {
-        const reporter = await supabaseDb.getUserById(body.reporterId);
-        if (reporter && ['ADMIN', 'GOVERNMENT_AGENCY', 'NGO'].includes(reporter.role)) {
-          initialStatus = 'VERIFIED_ACTIVE';
-        }
+      const roleStr = (reporterUser ? reporterUser.role : (body.role || body.userRole || '')).toUpperCase();
+      let initialStatus = 'PENDING_VERIFICATION';
+      if (['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY', 'NGO'].includes(roleStr)) {
+        initialStatus = 'VERIFIED_ACTIVE';
       }
+
+      console.log(`👤 [Incident Create]: Inserting disaster with created_by_user_id = ${validUserId}, role = ${roleStr || 'CITIZEN'}, initialStatus = ${initialStatus}`);
 
       const newDisaster = await supabaseDb.createDisaster({
         type: type,
@@ -114,34 +145,34 @@ module.exports = async (req, res) => {
         location_name: body.locationName || `Lat: ${userLat.toFixed(4)}, Lon: ${userLon.toFixed(4)}`,
         status: initialStatus,
         report_count: 1,
-        created_by_user_id: body.reporterId || null
+        created_by_user_id: validUserId
       });
 
       await supabaseDb.createReport({
         disaster_id: newDisaster.id,
-        reporter_id: body.reporterId || null,
-        reporter_name: body.reporterName || 'Anonymous Citizen',
-        reporter_phone: body.reporterPhone || 'N/A',
+        reporter_id: validUserId,
+        reporter_name: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen'),
+        reporter_phone: reporterUser ? reporterUser.phone : (body.reporterPhone || 'N/A'),
         latitude: userLat,
         longitude: userLon,
         message: body.description || 'Emergency reported.'
       });
 
-      // Send Telegram alert to admin for approval
+      // Send Telegram alert to admin for approval if pending verification
       sendAdminIncidentNotification({
         ...newDisaster,
-        createdByName: body.reporterName || 'Anonymous Citizen'
+        createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
       }).catch(err => console.warn('Telegram notification warning:', err.message));
 
       return sendJson(res, 201, {
         success: true,
-        message: initialStatus === 'VERIFIED_ACTIVE' ? 'Incident published to live feed.' : 'Citizen report submitted.',
+        message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster report published directly to live pipeline.' : 'Citizen report submitted. Awaiting Admin verification.',
         data: { ...newDisaster, reportCount: 1, wasMerged: false }
       });
     }
 
   } catch (err) {
-    console.error('Create Incident API Error:', err);
+    console.error('❌ [Incident Create DB Error]:', err.message || err);
     return sendJson(res, 500, {
       success: false,
       error: 'Internal Server Error',
