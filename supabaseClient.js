@@ -143,12 +143,13 @@ const supabaseDb = {
       .from('disasters')
       .select('*')
       .eq('type', type)
+      .in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS'])
       .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
-      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status
+      status: r.status
     }));
   },
 

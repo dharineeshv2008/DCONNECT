@@ -288,7 +288,7 @@ module.exports = async (req, res) => {
 
         return sendJson(res, 201, {
           success: true,
-          message: `Report merged into existing ${type} incident (#${targetDisaster.id}).`,
+          message: `Merged with existing incident ID: ${targetDisaster.id}`,
           data: { ...targetDisaster, reportCount: updatedCount, wasMerged: true }
         });
       } else {

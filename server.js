@@ -327,7 +327,7 @@ const server = http.createServer(async (req, res) => {
 
         return sendJson(res, 201, {
           success: true,
-          message: `Report merged into existing ${type} incident (#${targetDisaster.id}, ${targetDisaster.title}) located ${closestDist.toFixed(2)} km away. Total reports: ${updatedCount}.`,
+          message: `Merged with existing incident ID: ${targetDisaster.id}`,
           data: { ...targetDisaster, reportCount: updatedCount, wasMerged: true }
         });
       } else {

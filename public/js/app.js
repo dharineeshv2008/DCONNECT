@@ -706,24 +706,26 @@ async function executeDisasterSubmit(payload) {
       if (alertBox) {
         alertBox.innerHTML = `
           <div class="alert alert-info">
-            🔄 <strong>AUTOMATICALLY MERGED (Haversine 10km Rule):</strong><br>
-            ${data.message}<br>
-            Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>) now has <strong>${disaster.reportCount} reports</strong>.
+            🔄 <strong>AUTOMATICALLY MERGED (10km Active Incident Rule):</strong><br>
+            Already reported. Added to existing case (Incident #${disaster.id}).<br>
+            Total aggregated reports: <strong>${disaster.reportCount}</strong>.
           </div>
         `;
       }
-      showToast('Incident Merged', `Deduplicated into Incident #${disaster.id} (${disaster.reportCount} reports)`, 'info');
+      showToast('Already reported', 'Added to existing case', 'info');
     } else {
+      const isDirectVerified = disaster.status === 'VERIFIED_ACTIVE';
+      const toastMsg = isDirectVerified ? 'Incident published directly to live feed' : 'Incident submitted for verification';
       if (alertBox) {
         alertBox.innerHTML = `
           <div class="alert alert-success">
-            ✅ <strong>NEW DISASTER CREATED:</strong><br>
-            ${data.message}<br>
+            ✅ <strong>${isDirectVerified ? 'DISASTER PUBLISHED:' : 'INCIDENT SUBMITTED:'}</strong><br>
+            ${toastMsg}<br>
             Incident ID: #${disaster.id} (<strong>${escapeHtml(disaster.title)}</strong>).
           </div>
         `;
       }
-      showToast('Incident Reported', `Dispatched #${disaster.id} to emergency pipeline.`, 'success');
+      showToast('Incident Submitted', toastMsg, 'success');
     }
 
     document.getElementById('disasterReportForm').reset();
@@ -1599,6 +1601,7 @@ function renderAdminReportsTable() {
             <option value="CRITICAL" ${severityVal === 'CRITICAL' ? 'selected' : ''}>🔴 CRITICAL</option>
           </select>
         </td>
+        <td><span class="badge badge-assigned" style="font-weight: 700;" title="${d.reportCount || 1} aggregated report(s)">📊 ${d.reportCount || 1} Merged</span></td>
         <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(d.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
         <td>
           <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
