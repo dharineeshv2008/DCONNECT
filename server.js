@@ -465,30 +465,60 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // 9. Resources: List & Create
-    if (method === 'GET' && pathname === '/api/resources') {
+    // 9. Resources: List, Create, Update, Delete
+    if (method === 'GET' && (pathname === '/api/resources' || pathname === '/api/resources/list')) {
       const list = await supabaseDb.getResources();
-      return sendJson(res, 200, { success: true, data: list });
+      return sendJson(res, 200, { success: true, count: list.length, data: list });
     }
 
-    if (method === 'POST' && pathname === '/api/resources') {
+    if (method === 'POST' && (pathname === '/api/resources' || pathname === '/api/resources/create')) {
       const body = await parseBody(req);
       const newRes = await supabaseDb.createResource({
-        disaster_id: body.disasterId || 1,
-        provider_id: body.providerId || 4,
-        resource_type: body.resourceType || 'OTHER',
-        resource_name: body.resourceName || 'Emergency Supply',
+        disasterId: body.disasterId || body.disaster_id || null,
+        providerId: body.providerId || body.provider_id || null,
+        resourceType: body.resourceType || body.resource_type || 'OTHER',
+        description: body.description || body.resourceName || body.resource_name || 'Emergency Supply Post',
         quantity: parseInt(body.quantity) || 1,
         unit: body.unit || 'units',
-        status: 'AVAILABLE',
-        contact_phone: body.contactPhone || null
+        availableUntil: body.availableUntil || body.available_until || null,
+        status: body.status || 'ACTIVE',
+        contactPhone: body.contactPhone || body.contact_phone || null
       });
 
       return sendJson(res, 201, {
         success: true,
-        message: 'Resource added to emergency pool.',
+        message: 'Resource supply post created successfully.',
         data: newRes
       });
+    }
+
+    if ((method === 'POST' || method === 'PUT' || method === 'PATCH') && pathname === '/api/resources/update') {
+      const body = await parseBody(req);
+      const resId = parseInt(body.id || body.resourceId);
+      if (!resId || isNaN(resId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid resource ID is required.' });
+      }
+
+      const updated = await supabaseDb.updateResource(resId, {
+        resourceType: body.resourceType || body.resource_type,
+        description: body.description,
+        quantity: body.quantity !== undefined ? parseInt(body.quantity) : undefined,
+        availableUntil: body.availableUntil || body.available_until,
+        status: body.status
+      });
+
+      return sendJson(res, 200, { success: true, message: `Resource #${resId} updated successfully.`, data: updated });
+    }
+
+    if ((method === 'DELETE' || method === 'POST') && pathname === '/api/resources/delete') {
+      const body = await parseBody(req);
+      const resId = parseInt(body.id || body.resourceId || parsedUrl.query.id || parsedUrl.query.resourceId);
+      if (!resId || isNaN(resId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid resource ID is required for deletion.' });
+      }
+
+      const deleted = await supabaseDb.deleteResource(resId);
+      return sendJson(res, 200, { success: true, message: `Resource #${resId} deleted successfully.`, data: deleted });
     }
 
     // 10. Comments: List & Create

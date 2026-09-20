@@ -981,24 +981,35 @@ async function loadResources() {
   if (!container) return;
 
   try {
-    const data = await fetchAPI('/resources');
+    const data = await fetchAPI('/resources/list');
     const list = data.data || [];
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
       return;
     }
 
-    container.innerHTML = list.map(r => `
-      <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong>[${r.resourceType}] ${escapeHtml(r.resourceName)}</strong>
-          <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
+    container.innerHTML = list.map(r => {
+      const isExpired = r.status === 'EXPIRED';
+      const isRemoved = r.status === 'REMOVED';
+      const badgeClass = isExpired ? 'badge-medium' : (isRemoved ? 'badge-high' : 'badge-status-active');
+      const formattedExpiry = r.availableUntil ? new Date(r.availableUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
+
+      return `
+        <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <strong>[${r.resourceType}] ${escapeHtml(r.description || r.resourceName)}</strong>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge ${badgeClass}">${r.status}</span>
+              <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
+            </div>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
+            Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
+            ⏳ Available Until: <strong>${formattedExpiry}</strong>
+          </div>
         </div>
-        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
-          Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (err) {
     handleApiError(err);
   }
@@ -1008,26 +1019,41 @@ async function handleResourceSubmit(e) {
   e.preventDefault();
   if (!currentUser) return;
 
+  const desc = document.getElementById('resDescription')?.value.trim();
+  const untilVal = document.getElementById('resAvailableUntil')?.value;
+
+  if (!desc) {
+    showToast('Missing Field', 'Please provide a resource description.', 'warning');
+    return;
+  }
+
+  if (!untilVal) {
+    showToast('Missing Field', 'Please set the Available Until expiry date and time.', 'warning');
+    return;
+  }
+
   const payload = {
     providerId: currentUser.id,
     resourceType: document.getElementById('resType').value,
-    resourceName: document.getElementById('resName').value.trim(),
+    description: desc,
+    resourceName: desc,
     quantity: parseInt(document.getElementById('resQty').value),
     unit: document.getElementById('resUnit').value.trim(),
+    availableUntil: new Date(untilVal).toISOString(),
     contactPhone: document.getElementById('resPhone').value.trim() || currentUser.phone
   };
 
   try {
-    await fetchAPI('/resources', {
+    await fetchAPI('/resources/create', {
       method: 'POST',
       body: payload
     });
 
-    showToast('Resource Added', 'Emergency supply contribution added to pool!', 'success');
+    showToast('Resource Created', 'Emergency supply post created successfully!', 'success');
     document.getElementById('resourceForm').reset();
     loadResources();
   } catch (err) {
-    handleApiError(err);
+    showToast('Creation Failed', err.message || 'Failed to post resource.', 'error');
   }
 }
 
@@ -1112,6 +1138,183 @@ async function loadAdminData() {
   loadAdminReportsTable();
   loadAdminPendingUsers();
   loadAdminPendingDisasters();
+  loadAdminResourcesTable();
+}
+
+let adminResourcesList = [];
+
+async function loadAdminResourcesTable() {
+  const tbody = document.getElementById('adminResourcesTableBody');
+  if (!tbody) return;
+
+  try {
+    const data = await fetchAPI('/resources/list');
+    adminResourcesList = data.data || [];
+    renderAdminResourcesTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">Failed to load resources.</td></tr>`;
+  }
+}
+
+function renderAdminResourcesTable() {
+  const tbody = document.getElementById('adminResourcesTableBody');
+  if (!tbody) return;
+
+  if (adminResourcesList.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 28px 16px;">
+          📦 No emergency resource supply posts found.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = adminResourcesList.map(r => {
+    const formattedExpiry = r.availableUntil ? new Date(r.availableUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'N/A';
+    return `
+      <tr>
+        <td><strong>#${r.id}</strong></td>
+        <td><span class="badge badge-status-active">${r.resourceType}</span></td>
+        <td>${escapeHtml(r.description || r.resourceName)}</td>
+        <td><strong>${escapeHtml(r.providerName)}</strong></td>
+        <td>${r.quantity} ${escapeHtml(r.unit)}</td>
+        <td style="font-size: 0.82rem;">${formattedExpiry}</td>
+        <td>
+          <select class="admin-select-status" onchange="updateAdminInlineResourceStatus(${r.id}, this.value)">
+            <option value="ACTIVE" ${r.status === 'ACTIVE' ? 'selected' : ''}>🟢 ACTIVE</option>
+            <option value="EXPIRED" ${r.status === 'EXPIRED' ? 'selected' : ''}>🟠 EXPIRED</option>
+            <option value="REMOVED" ${r.status === 'REMOVED' ? 'selected' : ''}>🔴 REMOVED</option>
+          </select>
+        </td>
+        <td>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <button class="btn btn-outline btn-sm" onclick="openAdminEditResourceModal(${r.id})">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="promptDeleteResource(${r.id}, '${escapeHtml(r.description || r.resourceName)}')">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function updateAdminInlineResourceStatus(resId, newStatus) {
+  try {
+    await fetchAPI('/resources/update', {
+      method: 'POST',
+      body: { id: resId, status: newStatus }
+    });
+
+    showToast('Resource Status Updated', `Resource #${resId} status updated to '${newStatus}'`, 'success');
+
+    const item = adminResourcesList.find(r => r.id === resId);
+    if (item) item.status = newStatus;
+    renderAdminResourcesTable();
+    loadResources();
+  } catch (err) {
+    showToast('Update Failed', err.message || 'Failed to update resource status.', 'error');
+    loadAdminResourcesTable();
+  }
+}
+
+function openAdminEditResourceModal(resId) {
+  const item = adminResourcesList.find(r => r.id === resId);
+  if (!item) return;
+
+  document.getElementById('adminEditResId').value = item.id;
+  document.getElementById('adminEditResType').value = item.resourceType || 'OTHER';
+  document.getElementById('adminEditResDescription').value = item.description || item.resourceName || '';
+  document.getElementById('adminEditResQuantity').value = item.quantity || 1;
+  document.getElementById('adminEditResStatus').value = item.status || 'ACTIVE';
+
+  if (item.availableUntil) {
+    const d = new Date(item.availableUntil);
+    const isoLocal = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    document.getElementById('adminEditResAvailableUntil').value = isoLocal;
+  } else {
+    document.getElementById('adminEditResAvailableUntil').value = '';
+  }
+
+  openModal('adminEditResourceModal');
+}
+
+async function submitAdminEditResource(e) {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('adminEditResId').value);
+  const resourceType = document.getElementById('adminEditResType').value;
+  const description = document.getElementById('adminEditResDescription').value.trim();
+  const quantity = parseInt(document.getElementById('adminEditResQuantity').value);
+  const status = document.getElementById('adminEditResStatus').value;
+  const availableUntilVal = document.getElementById('adminEditResAvailableUntil').value;
+
+  try {
+    await fetchAPI('/resources/update', {
+      method: 'POST',
+      body: {
+        id,
+        resourceType,
+        description,
+        quantity,
+        status,
+        availableUntil: availableUntilVal ? new Date(availableUntilVal).toISOString() : null
+      }
+    });
+
+    closeModal('adminEditResourceModal');
+    showToast('Resource Updated', `Resource #${id} updated successfully.`, 'success');
+    loadAdminResourcesTable();
+    loadResources();
+  } catch (err) {
+    showToast('Update Failed', err.message || 'Failed to update resource.', 'error');
+  }
+}
+
+function promptDeleteResource(resId, name) {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can delete resource posts.', 'error');
+    return;
+  }
+
+  document.getElementById('deleteTargetResourceId').value = resId;
+
+  const textInput = document.getElementById('deleteResourceTextInput');
+  const submitBtn = document.getElementById('deleteResourceSubmitBtn');
+  if (textInput) {
+    textInput.value = '';
+    textInput.oninput = (e) => {
+      const val = (e.target.value || '').trim();
+      if (submitBtn) submitBtn.disabled = (val !== 'DELETE');
+    };
+  }
+  if (submitBtn) submitBtn.disabled = true;
+
+  openModal('deleteResourceConfirmModal');
+}
+
+async function handleDeleteResourceConfirmSubmit(e) {
+  e.preventDefault();
+  const resId = parseInt(document.getElementById('deleteTargetResourceId').value);
+  const val = (document.getElementById('deleteResourceTextInput')?.value || '').trim();
+
+  if (val !== 'DELETE') {
+    showToast('Verification Required', 'Please type DELETE in uppercase to confirm.', 'warning');
+    return;
+  }
+
+  try {
+    await fetchAPI('/resources/delete', {
+      method: 'DELETE',
+      body: { id: resId }
+    });
+
+    closeModal('deleteResourceConfirmModal');
+    showToast('Resource Deleted', `Resource supply post #${resId} deleted successfully.`, 'success');
+    loadAdminResourcesTable();
+    loadResources();
+  } catch (err) {
+    showToast('Deletion Failed', err.message || 'Failed to delete resource.', 'error');
+  }
 }
 
 async function loadAdminAnalytics() {

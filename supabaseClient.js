@@ -362,21 +362,43 @@ const supabaseDb = {
       .select('*, users:provider_id(name,role,phone), disasters(title)')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data || []).map(r => ({
-      id: r.id,
-      disasterId: r.disaster_id,
-      disasterTitle: r.disasters?.title || 'General Emergency Supply Pool',
-      providerId: r.provider_id,
-      providerName: r.users?.name || 'Relief Agency',
-      providerRole: r.users?.role || 'GOVERNMENT_AGENCY',
-      resourceType: r.resource_type,
-      resourceName: r.resource_name,
-      quantity: r.quantity,
-      unit: r.unit,
-      status: r.status,
-      contactPhone: r.contact_phone || r.users?.phone || 'N/A',
-      createdAt: r.created_at
-    }));
+
+    const now = new Date();
+    const expiredIdsToUpdate = [];
+
+    const mapped = (data || []).map(r => {
+      let currentStatus = r.status || 'ACTIVE';
+      if (currentStatus === 'AVAILABLE') currentStatus = 'ACTIVE';
+
+      if (r.available_until && new Date(r.available_until) < now && currentStatus === 'ACTIVE') {
+        currentStatus = 'EXPIRED';
+        expiredIdsToUpdate.push(r.id);
+      }
+
+      return {
+        id: r.id,
+        disasterId: r.disaster_id,
+        disasterTitle: r.disasters?.title || 'General Emergency Supply Pool',
+        providerId: r.provider_id,
+        providerName: r.users?.name || 'Relief Agency',
+        providerRole: r.users?.role || 'GOVERNMENT_AGENCY',
+        resourceType: r.resource_type || 'OTHER',
+        resourceName: r.resource_name || r.description || 'Emergency Supply',
+        description: r.description || r.resource_name || 'Emergency Supply Post',
+        quantity: r.quantity || 1,
+        unit: r.unit || 'units',
+        availableUntil: r.available_until || null,
+        status: currentStatus,
+        contactPhone: r.contact_phone || r.users?.phone || 'N/A',
+        createdAt: r.created_at
+      };
+    });
+
+    if (expiredIdsToUpdate.length > 0) {
+      supabase.from('resources').update({ status: 'EXPIRED' }).in('id', expiredIdsToUpdate).catch(() => {});
+    }
+
+    return mapped;
   },
 
   async createResource(resData) {
@@ -402,14 +424,22 @@ const supabaseDb = {
       }
     }
 
+    const availableUntilVal = resData.available_until || resData.availableUntil || null;
+    let initialStatus = resData.status || 'ACTIVE';
+    if (availableUntilVal && new Date(availableUntilVal) < new Date()) {
+      initialStatus = 'EXPIRED';
+    }
+
     const cleanRes = {
       disaster_id: targetDisasterId,
       provider_id: resData.provider_id || resData.providerId || null,
       resource_type: resData.resource_type || resData.resourceType || 'OTHER',
-      resource_name: resData.resource_name || resData.resourceName || 'Emergency Supply',
+      resource_name: resData.resource_name || resData.description || resData.resourceName || 'Emergency Supply',
+      description: resData.description || resData.resource_name || resData.resourceName || 'Emergency Supply Post',
       quantity: parseInt(resData.quantity) || 1,
       unit: resData.unit || 'units',
-      status: resData.status || 'AVAILABLE',
+      available_until: availableUntilVal,
+      status: initialStatus,
       contact_phone: resData.contact_phone || resData.contactPhone || null
     };
 
@@ -442,6 +472,38 @@ const supabaseDb = {
       }
       throw err;
     }
+  },
+
+  async updateResource(id, updates) {
+    const cleanUpdates = {};
+    if (updates.resource_type || updates.resourceType) cleanUpdates.resource_type = updates.resource_type || updates.resourceType;
+    if (updates.description !== undefined) {
+      cleanUpdates.description = updates.description;
+      cleanUpdates.resource_name = updates.description;
+    }
+    if (updates.quantity !== undefined) cleanUpdates.quantity = parseInt(updates.quantity);
+    if (updates.available_until !== undefined || updates.availableUntil !== undefined) {
+      cleanUpdates.available_until = updates.available_until || updates.availableUntil;
+    }
+    if (updates.status !== undefined) cleanUpdates.status = updates.status;
+
+    const { data, error } = await supabase
+      .from('resources')
+      .update(cleanUpdates)
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : null;
+  },
+
+  async deleteResource(id) {
+    const { data, error } = await supabase
+      .from('resources')
+      .delete()
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return data && data.length > 0 ? data[0] : { id };
   },
 
   // --- COMMENTS ---

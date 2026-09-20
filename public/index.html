@@ -448,8 +448,8 @@
               </div>
 
               <div class="form-group">
-                <label>Item Name / Description *</label>
-                <input type="text" id="resName" class="form-control" placeholder="e.g. Ready-to-eat Meal Packets" required>
+                <label>Resource Description / Details *</label>
+                <textarea id="resDescription" class="form-control" rows="3" placeholder="e.g. 500 Ready-to-eat Packets, clean & sealed, packaged 2 hours ago." required></textarea>
               </div>
 
               <div class="grid-2">
@@ -461,6 +461,11 @@
                   <label>Unit of Measure *</label>
                   <input type="text" id="resUnit" class="form-control" placeholder="e.g. packets / boxes / litres" required>
                 </div>
+              </div>
+
+              <div class="form-group">
+                <label>Available Until (Expiry Date & Time) *</label>
+                <input type="datetime-local" id="resAvailableUntil" class="form-control" required>
               </div>
 
               <div class="form-group">
@@ -602,6 +607,37 @@
             <div id="adminPendingDisastersList">
               <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>
             </div>
+          </div>
+        </div>
+
+        <!-- Admin Emergency Resources Management Table -->
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-title">📦 Emergency Resources Supply Posts</div>
+            <button class="btn btn-outline btn-sm" onclick="loadAdminResourcesTable()">🔄 Refresh Resources</button>
+          </div>
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th>Provider</th>
+                  <th>Qty / Unit</th>
+                  <th>Available Until (Expiry)</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminResourcesTableBody">
+                <tr>
+                  <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    Loading resource supply posts...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -885,6 +921,86 @@
         <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
           <button type="button" class="btn btn-outline" onclick="closeModal('adminEditIncidentModal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Edit Resource Modal -->
+  <div id="adminEditResourceModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 500px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">✏️ Edit Resource Supply Post</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminEditResourceModal')">✕</button>
+      </div>
+      <form id="adminEditResourceForm" onsubmit="submitAdminEditResource(event)">
+        <input type="hidden" id="adminEditResId">
+        
+        <div class="form-group" style="margin-top: 12px;">
+          <label>Resource Type *</label>
+          <select id="adminEditResType" class="form-control" required>
+            <option value="FOOD">🍞 Food & Ration</option>
+            <option value="WATER">💧 Clean Drinking Water</option>
+            <option value="MEDICAL">💊 Medical & First Aid Kits</option>
+            <option value="SHELTER">⛺ Tarpaulins & Tents</option>
+            <option value="RESCUE_EQUIPMENT">🛟 Boats & Rescue Gear</option>
+            <option value="TRANSPORT">🚚 Transport Vehicles</option>
+            <option value="CLOTHING">👕 Blankets & Warm Clothes</option>
+            <option value="OTHER">📦 Other Supplies</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="adminEditResDescription" rows="3" class="form-control" required></textarea>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Quantity *</label>
+            <input type="number" id="adminEditResQuantity" class="form-control" min="1" required>
+          </div>
+          <div class="form-group">
+            <label>Status *</label>
+            <select id="adminEditResStatus" class="form-control" required>
+              <option value="ACTIVE">🟢 ACTIVE</option>
+              <option value="EXPIRED">🟠 EXPIRED</option>
+              <option value="REMOVED">🔴 REMOVED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Available Until (Expiry) *</label>
+          <input type="datetime-local" id="adminEditResAvailableUntil" class="form-control" required>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('adminEditResourceModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Resource Verification Modal (Type DELETE) -->
+  <div id="deleteResourceConfirmModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Delete Resource Supply Post</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('deleteResourceConfirmModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 12px 0 16px 0; font-size: 0.9rem; line-height: 1.5;">
+        This action cannot be undone. Type <strong>DELETE</strong> in uppercase below to confirm:
+      </p>
+      <form onsubmit="handleDeleteResourceConfirmSubmit(event)">
+        <input type="hidden" id="deleteTargetResourceId">
+        <div class="form-group">
+          <input type="text" id="deleteResourceTextInput" class="form-control" placeholder="Type DELETE" required autocomplete="off" style="font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('deleteResourceConfirmModal')">Cancel</button>
+          <button type="submit" id="deleteResourceSubmitBtn" class="btn btn-danger" disabled>Confirm Delete</button>
         </div>
       </form>
     </div>
