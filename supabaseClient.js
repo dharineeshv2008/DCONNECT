@@ -380,12 +380,68 @@ const supabaseDb = {
   },
 
   async createResource(resData) {
-    const { data, error } = await supabase
-      .from('resources')
-      .insert([resData])
-      .select();
-    if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    let targetDisasterId = resData.disaster_id || resData.disasterId;
+
+    if (targetDisasterId) {
+      try {
+        const existing = await this.getDisasterById(targetDisasterId);
+        if (!existing) targetDisasterId = null;
+      } catch (e) {
+        targetDisasterId = null;
+      }
+    }
+
+    if (!targetDisasterId) {
+      try {
+        const activeDisasters = await this.getAllDisasters();
+        if (activeDisasters && activeDisasters.length > 0) {
+          targetDisasterId = activeDisasters[0].id;
+        }
+      } catch (e) {
+        targetDisasterId = null;
+      }
+    }
+
+    const cleanRes = {
+      disaster_id: targetDisasterId,
+      provider_id: resData.provider_id || resData.providerId || null,
+      resource_type: resData.resource_type || resData.resourceType || 'OTHER',
+      resource_name: resData.resource_name || resData.resourceName || 'Emergency Supply',
+      quantity: parseInt(resData.quantity) || 1,
+      unit: resData.unit || 'units',
+      status: resData.status || 'AVAILABLE',
+      contact_phone: resData.contact_phone || resData.contactPhone || null
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('resources')
+        .insert([cleanRes])
+        .select();
+      if (error) throw error;
+      return data && data.length > 0 ? data[0] : null;
+    } catch (err) {
+      if (err.code === '23503' && !cleanRes.disaster_id) {
+        const defaultDisaster = await this.createDisaster({
+          title: 'General Emergency Relief Supply Pool',
+          type: 'OTHER',
+          description: 'System pool for general resource contributions.',
+          severity: 'LOW',
+          latitude: 13.0827,
+          longitude: 80.2707,
+          location_name: 'Central Emergency Relief Command',
+          status: 'VERIFIED_ACTIVE'
+        });
+        cleanRes.disaster_id = defaultDisaster.id;
+        const { data: d2, error: e2 } = await supabase
+          .from('resources')
+          .insert([cleanRes])
+          .select();
+        if (e2) throw e2;
+        return d2 && d2.length > 0 ? d2[0] : null;
+      }
+      throw err;
+    }
   },
 
   // --- COMMENTS ---
