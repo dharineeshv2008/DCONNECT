@@ -62,16 +62,18 @@ module.exports = async (req, res) => {
     }
     if (body.status !== undefined) {
       let st = String(body.status).toUpperCase().trim();
-      if (st === 'AVAILABLE') st = 'ACTIVE';
-      if (st === 'REMOVED') st = 'INACTIVE';
-      if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(st)) {
+      let sanitized = 'AVAILABLE';
+      if (['AVAILABLE', 'ACTIVE', 'OPEN'].includes(st)) sanitized = 'AVAILABLE';
+      else if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED'].includes(st)) sanitized = 'DISPATCHED';
+      else if (['EXHAUSTED', 'EXPIRED', 'INACTIVE', 'REMOVED'].includes(st)) sanitized = 'EXHAUSTED';
+      else {
         return sendJson(res, 400, {
           success: false,
           error: 'Bad Request',
-          message: `Invalid status: ${body.status}. Allowed values: ACTIVE, INACTIVE, EXPIRED`
+          message: `Invalid status: ${body.status}. Allowed values: AVAILABLE, DISPATCHED, EXHAUSTED`
         });
       }
-      updates.status = st;
+      updates.status = sanitized;
     }
 
     const updated = await supabaseDb.updateResource(id, updates);

@@ -57,12 +57,11 @@ module.exports = async (req, res) => {
       });
     }
 
-    let status = (body.status || 'ACTIVE').toString().toUpperCase().trim();
-    if (status === 'AVAILABLE') status = 'ACTIVE';
-    if (status === 'REMOVED') status = 'INACTIVE';
-    if (!['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(status)) {
-      status = 'ACTIVE';
-    }
+    let rawStatus = (body.status || 'AVAILABLE').toString().toUpperCase().trim();
+    let status = 'AVAILABLE';
+    if (['AVAILABLE', 'ACTIVE', 'OPEN'].includes(rawStatus)) status = 'AVAILABLE';
+    else if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED'].includes(rawStatus)) status = 'DISPATCHED';
+    else if (['EXHAUSTED', 'EXPIRED', 'INACTIVE', 'REMOVED'].includes(rawStatus)) status = 'EXHAUSTED';
 
     const newResource = await supabaseDb.createResource({
       disasterId: body.disasterId || body.disaster_id || null,

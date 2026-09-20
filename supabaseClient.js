@@ -13,12 +13,12 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 function sanitizeResourceStatus(input) {
-  if (!input) return 'ACTIVE';
+  if (!input) return 'AVAILABLE';
   const upper = String(input).trim().toUpperCase();
-  if (upper === 'AVAILABLE') return 'ACTIVE';
-  if (upper === 'REMOVED') return 'INACTIVE';
-  if (['ACTIVE', 'INACTIVE', 'EXPIRED'].includes(upper)) return upper;
-  return 'ACTIVE';
+  if (['ACTIVE', 'AVAILABLE', 'OPEN', 'IN_STOCK'].includes(upper)) return 'AVAILABLE';
+  if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED', 'ASSIGNED'].includes(upper)) return 'DISPATCHED';
+  if (['EXPIRED', 'EXHAUSTED', 'INACTIVE', 'REMOVED', 'CLOSED', 'DEPLETED'].includes(upper)) return 'EXHAUSTED';
+  return 'AVAILABLE';
 }
 
 const supabaseDb = {
@@ -394,8 +394,8 @@ const supabaseDb = {
     const mapped = (data || []).map(r => {
       let currentStatus = sanitizeResourceStatus(r.status);
 
-      if (r.available_until && new Date(r.available_until) < now && currentStatus === 'ACTIVE') {
-        currentStatus = 'EXPIRED';
+      if (r.available_until && new Date(r.available_until) < now && currentStatus === 'AVAILABLE') {
+        currentStatus = 'EXHAUSTED';
         expiredIdsToUpdate.push(r.id);
       }
 
@@ -422,7 +422,7 @@ const supabaseDb = {
     });
 
     if (expiredIdsToUpdate.length > 0) {
-      supabase.from('resources').update({ status: 'EXPIRED' }).in('id', expiredIdsToUpdate).catch(() => {});
+      supabase.from('resources').update({ status: 'EXHAUSTED' }).in('id', expiredIdsToUpdate).catch(() => {});
     }
 
     return mapped;
@@ -454,7 +454,7 @@ const supabaseDb = {
     const availableUntilVal = resData.available_until || resData.availableUntil || null;
     let initialStatus = sanitizeResourceStatus(resData.status);
     if (availableUntilVal && new Date(availableUntilVal) < new Date()) {
-      initialStatus = 'EXPIRED';
+      initialStatus = 'EXHAUSTED';
     }
 
     const cleanRes = {

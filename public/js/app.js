@@ -989,9 +989,9 @@ async function loadResources() {
     }
 
     container.innerHTML = list.map(r => {
-      const isExpired = r.status === 'EXPIRED';
-      const isInactive = r.status === 'INACTIVE' || r.status === 'REMOVED';
-      const badgeClass = isExpired ? 'badge-medium' : (isInactive ? 'badge-high' : 'badge-status-active');
+      const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
+      const isDispatched = r.status === 'DISPATCHED';
+      const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
       const formattedExpiry = r.availableUntil ? new Date(r.availableUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
       const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
       const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
@@ -1034,7 +1034,7 @@ async function handleResourceSubmit(e) {
   const address = document.getElementById('resAddress')?.value.trim();
   const latVal = parseFloat(document.getElementById('resLatitude')?.value);
   const lngVal = parseFloat(document.getElementById('resLongitude')?.value);
-  const statusVal = document.getElementById('resStatus')?.value || 'ACTIVE';
+  const statusVal = document.getElementById('resStatus')?.value || 'AVAILABLE';
 
   if (!desc) {
     showToast('Missing Field', 'Please provide a resource description.', 'warning');
@@ -1201,9 +1201,9 @@ function renderAdminResourcesTable() {
         <td style="font-size: 0.82rem;">${formattedExpiry}</td>
         <td>
           <select class="admin-select-status" onchange="updateAdminInlineResourceStatus(${r.id}, this.value)">
-            <option value="ACTIVE" ${r.status === 'ACTIVE' ? 'selected' : ''}>🟢 ACTIVE</option>
-            <option value="INACTIVE" ${r.status === 'INACTIVE' || r.status === 'REMOVED' ? 'selected' : ''}>⚪ INACTIVE</option>
-            <option value="EXPIRED" ${r.status === 'EXPIRED' ? 'selected' : ''}>🟠 EXPIRED</option>
+            <option value="AVAILABLE" ${r.status === 'AVAILABLE' || r.status === 'ACTIVE' ? 'selected' : ''}>🟢 AVAILABLE</option>
+            <option value="DISPATCHED" ${r.status === 'DISPATCHED' ? 'selected' : ''}>🚚 DISPATCHED</option>
+            <option value="EXHAUSTED" ${r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'INACTIVE' ? 'selected' : ''}>🔴 EXHAUSTED</option>
           </select>
         </td>
         <td>
