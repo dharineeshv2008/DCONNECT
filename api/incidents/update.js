@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
       try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
 
-    const incidentId = parseInt(body.incidentId || body.disasterId || body.id);
+    const incidentId = parseInt(body.id || body.incidentId || body.disasterId);
     let rawStatus = (body.status || '').trim();
 
     if (!incidentId || isNaN(incidentId)) {
@@ -52,6 +52,24 @@ module.exports = async (req, res) => {
         success: false,
         error: 'Bad Request',
         message: 'Valid incident ID is required.'
+      });
+    }
+
+    if (!rawStatus) {
+      return sendJson(res, 400, {
+        success: false,
+        error: 'Bad Request',
+        message: 'Status is required.'
+      });
+    }
+
+    // SAFEGUARD: Validate id exists before update
+    const existing = await supabaseDb.getDisasterById(incidentId);
+    if (!existing) {
+      return sendJson(res, 404, {
+        success: false,
+        error: 'Not Found',
+        message: `Incident #${incidentId} does not exist.`
       });
     }
 
@@ -70,14 +88,23 @@ module.exports = async (req, res) => {
       return sendJson(res, 400, {
         success: false,
         error: 'Bad Request',
-        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED.`
+        message: `Invalid status '${rawStatus}'. Allowed values: VERIFIED_ACTIVE, IN_PROGRESS, RESOLVED, CLOSED, PENDING.`
       });
     }
 
+    // Update existing row (NEVER insert, ALWAYS filter by eq("id", incident_id))
     const updated = await supabaseDb.updateDisaster(incidentId, {
       status: dbStatus,
       updated_at: new Date().toISOString()
     });
+
+    if (!updated) {
+      return sendJson(res, 404, {
+        success: false,
+        error: 'Not Found',
+        message: `Incident #${incidentId} not found or could not be updated.`
+      });
+    }
 
     return sendJson(res, 200, {
       success: true,

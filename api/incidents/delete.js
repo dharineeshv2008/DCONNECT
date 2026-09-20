@@ -33,11 +33,24 @@ module.exports = async (req, res) => {
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
+    if (!body || Object.keys(body).length === 0) {
+      let raw = '';
+      await new Promise((resolve) => {
+        req.on('data', chunk => raw += chunk);
+        req.on('end', () => {
+          try { body = raw ? JSON.parse(raw) : {}; } catch (e) { body = {}; }
+          resolve();
+        });
+        req.on('error', () => resolve());
+      });
+    }
 
-    // Try extracting ID from query params or body
-    const urlParts = req.url.split('?');
+    // Try extracting ID from query params, body, or URL path
+    const urlParts = (req.url || '').split('?');
     const queryParams = new URLSearchParams(urlParts[1] || '');
-    const incidentId = parseInt(body.incidentId || body.id || body.disasterId || queryParams.get('id') || queryParams.get('incidentId'));
+    const pathParts = urlParts[0].split('/').filter(Boolean);
+    const lastPart = parseInt(pathParts[pathParts.length - 1]);
+    const incidentId = parseInt(body.incidentId || body.id || body.disasterId || queryParams.get('id') || queryParams.get('incidentId') || (isNaN(lastPart) ? null : lastPart));
 
     if (!incidentId || isNaN(incidentId)) {
       return sendJson(res, 400, {

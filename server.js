@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const { supabaseDb } = require('./supabaseClient');
-const { handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification } = require('./telegramBot');
+const { initTelegramBot, handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification } = require('./telegramBot');
 
 const PORT = process.env.PORT || 8000;
 const STATIC_DIR = path.join(__dirname, 'src', 'main', 'resources', 'static');
@@ -349,11 +349,21 @@ const server = http.createServer(async (req, res) => {
     // 6. Disasters & Incidents: Update Status
     if ((method === 'POST' || method === 'PATCH' || method === 'PUT') && pathname === '/api/incidents/update') {
       const body = await parseBody(req);
-      const incidentId = parseInt(body.incidentId || body.disasterId || body.id);
-      let statusInput = (body.status || 'IN_PROGRESS').trim();
+      const incidentId = parseInt(body.id || body.incidentId || body.disasterId);
+      let statusInput = (body.status || '').trim();
 
       if (!incidentId || isNaN(incidentId)) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required.' });
+      }
+
+      if (!statusInput) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Status is required.' });
+      }
+
+      // SAFEGUARD: Validate id exists before update
+      const existing = await supabaseDb.getDisasterById(incidentId);
+      if (!existing) {
+        return sendJson(res, 404, { success: false, error: 'Not Found', message: `Incident #${incidentId} does not exist.` });
       }
 
       let dbStatus = statusInput.toUpperCase();
@@ -363,10 +373,19 @@ const server = http.createServer(async (req, res) => {
       if (statusInput === 'Closed') dbStatus = 'CLOSED';
       if (statusInput === 'Cancelled by Admin' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'CANCELLED') dbStatus = 'CLOSED';
 
+      const ALLOWED_DB_STATUSES = ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'PENDING'];
+      if (!ALLOWED_DB_STATUSES.includes(dbStatus)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Invalid status '${statusInput}'.` });
+      }
+
       const updated = await supabaseDb.updateDisaster(incidentId, {
         status: dbStatus,
         updated_at: new Date().toISOString()
       });
+
+      if (!updated) {
+        return sendJson(res, 404, { success: false, error: 'Not Found', message: `Incident #${incidentId} not found or could not be updated.` });
+      }
 
       return sendJson(res, 200, {
         success: true,
@@ -403,6 +422,21 @@ const server = http.createServer(async (req, res) => {
 
       const updated = await supabaseDb.editDisaster(incidentId, updates);
       return sendJson(res, 200, { success: true, message: `Incident #${incidentId} updated.`, data: updated });
+    }
+
+    // 6.2.1 Delete Incident
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/incidents/delete' || pathname.startsWith('/api/incidents/delete') || (method === 'DELETE' && (pathname.includes('/incidents/') || pathname.includes('/disasters/'))))) {
+      const body = await parseBody(req);
+      const parts = pathname.split('/').filter(Boolean);
+      const lastPart = parseInt(parts[parts.length - 1]);
+      const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId || (isNaN(lastPart) ? null : lastPart));
+
+      if (!incidentId || isNaN(incidentId)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required for deletion.' });
+      }
+
+      const deleted = await supabaseDb.deleteDisaster(incidentId);
+      return sendJson(res, 200, { success: true, message: `Incident #${incidentId} deleted successfully.`, data: deleted });
     }
 
     // 6.3 Volunteers Directory (Strict role=VOLUNTEER)
@@ -684,4 +718,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Disaster Coordination Server running at http://localhost:${PORT}`);
   console.log(`Supabase Connected: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co'}`);
+  initTelegramBot().catch(err => console.warn('Telegram Bot startup warning:', err.message));
 });

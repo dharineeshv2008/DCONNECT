@@ -32,10 +32,23 @@ module.exports = async (req, res) => {
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
+    if (!body || Object.keys(body).length === 0) {
+      let raw = '';
+      await new Promise((resolve) => {
+        req.on('data', chunk => raw += chunk);
+        req.on('end', () => {
+          try { body = raw ? JSON.parse(raw) : {}; } catch (e) { body = {}; }
+          resolve();
+        });
+        req.on('error', () => resolve());
+      });
+    }
 
-    const urlObj = new URL(req.url, 'http://localhost');
+    const urlObj = new URL(req.url || '/', 'http://localhost');
     const idParam = urlObj.searchParams.get('id') || urlObj.searchParams.get('resourceId');
-    const id = parseInt(body.id || body.resourceId || idParam);
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    const lastPart = parseInt(pathParts[pathParts.length - 1]);
+    const id = parseInt(body.id || body.resourceId || idParam || (isNaN(lastPart) ? null : lastPart));
 
     if (!id || isNaN(id)) {
       return sendJson(res, 400, {

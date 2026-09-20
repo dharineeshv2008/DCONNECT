@@ -131,13 +131,13 @@ const supabaseDb = {
   },
 
   async getCandidateDisastersForMerge(type) {
-    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const { data, error } = await supabase
       .from('disasters')
       .select('*')
       .eq('type', type)
       .in('status', ['PENDING', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'Open', 'In Progress'])
-      .gte('created_at', threeHoursAgo)
+      .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
@@ -163,16 +163,45 @@ const supabaseDb = {
     const rawSeverity = (disasterData.severity || 'UNVERIFIED').toUpperCase();
     const dbSeverity = (rawSeverity === 'UNVERIFIED') ? 'LOW' : rawSeverity;
 
+    let validUserId = disasterData.created_by_user_id;
+    if (validUserId) {
+      const parsedId = parseInt(validUserId);
+      if (isNaN(parsedId)) {
+        validUserId = null;
+      } else {
+        try {
+          const userObj = await this.getUserById(parsedId);
+          if (!userObj) {
+            console.warn(`⚠️ [supabaseDb.createDisaster]: User ID ${parsedId} does not exist in users table. Resetting created_by_user_id to null.`);
+            validUserId = null;
+          } else {
+            validUserId = userObj.id;
+          }
+        } catch (e) {
+          validUserId = null;
+        }
+      }
+    }
+
     const payload = {
       ...disasterData,
       severity: dbSeverity,
-      status: disasterData.status || 'PENDING'
+      status: disasterData.status || 'PENDING',
+      created_by_user_id: validUserId || null
     };
+
+    console.log('👤 [supabaseDb.createDisaster]: Inserting disaster with created_by_user_id:', payload.created_by_user_id);
+
     const { data, error } = await supabase
       .from('disasters')
       .insert([payload])
       .select();
-    if (error) throw error;
+
+    if (error) {
+      console.error('❌ [supabaseDb.createDisaster DB Error]:', error.message || error);
+      throw error;
+    }
+
     if (!data || data.length === 0) return null;
     return {
       ...data[0],
@@ -228,10 +257,12 @@ const supabaseDb = {
   },
 
   async deleteDisaster(id) {
-    await supabase.from('reports').delete().eq('disaster_id', id).catch(() => {});
-    await supabase.from('assignments').delete().eq('disaster_id', id).catch(() => {});
-    await supabase.from('resources').delete().eq('disaster_id', id).catch(() => {});
-    await supabase.from('comments').delete().eq('disaster_id', id).catch(() => {});
+    await Promise.allSettled([
+      supabase.from('reports').delete().eq('disaster_id', id),
+      supabase.from('assignments').delete().eq('disaster_id', id),
+      supabase.from('resources').delete().eq('disaster_id', id),
+      supabase.from('comments').delete().eq('disaster_id', id)
+    ]);
 
     const { data, error } = await supabase
       .from('disasters')

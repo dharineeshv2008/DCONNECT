@@ -1,19 +1,23 @@
 /**
  * Telegram Bot Helper Module for Admin Approval Workflow
- * Handles Telegram Bot API calls, webhook processing, admin security validation, and Supabase status updates.
+ * Dual Mode support: Works via local long-polling AND Vercel Serverless Webhook (/api/telegram/webhook)
  */
 
 const https = require('https');
 const { supabaseDb } = require('./supabaseClient');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8778978825:AAFoTE5ixdli9HGYVpyArQOIZ-vc7Pkpps4';
-let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || null;
+let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '6868121119';
+
+let pollingInterval = null;
+let lastUpdateId = 0;
 
 function getAdminChatId() {
-  return process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || null;
+  return process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || '6868121119';
 }
 
 function setAdminChatId(chatId) {
+  if (!chatId) return;
   registeredAdminChatId = String(chatId);
   global.TELEGRAM_ADMIN_CHAT_ID = String(chatId);
 }
@@ -49,13 +53,46 @@ function callTelegramApi(method, payload) {
     });
 
     req.on('error', (err) => {
-      console.error('Telegram API error:', err);
+      console.error('Telegram API error:', err.message);
       reject(err);
     });
 
     req.write(data);
     req.end();
   });
+}
+
+/**
+ * Send System Startup Notification to Admin Telegram
+ */
+async function sendStartupNotification() {
+  const adminChatId = getAdminChatId();
+  if (!adminChatId) return null;
+
+  const nowStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+
+  const text = 
+`🚀 <b>SYSTEM RUNNING SUCCESSFULLY!</b> 🚀
+
+<b>AppName:</b> D-Connect Disaster Management System
+<b>Status:</b> 🟢 ACTIVE & ONLINE
+<b>Time:</b> <code>${nowStr} IST</code>
+<b>Admin Chat ID:</b> <code>${adminChatId}</code>
+
+<i>Realtime disaster requests & resource contributions will be forwarded here for instant approval/rejection.</i>`;
+
+  try {
+    const res = await callTelegramApi('sendMessage', {
+      chat_id: adminChatId,
+      text: text,
+      parse_mode: 'HTML'
+    });
+    console.log(`✅ [Telegram Bot]: Startup notification sent to Admin chat #${adminChatId}`);
+    return res;
+  } catch (err) {
+    console.warn('⚠️ [Telegram Bot]: Could not send startup notification:', err.message);
+    return null;
+  }
 }
 
 /**
@@ -69,7 +106,7 @@ async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
       show_alert: showAlert
     });
   } catch (err) {
-    console.error('Failed to answer callback query:', err);
+    console.error('Failed to answer callback query:', err.message);
   }
 }
 
@@ -87,7 +124,7 @@ async function editMessageStatus(chatId, messageId, originalText, statusText) {
       reply_markup: { inline_keyboard: [] }
     });
   } catch (err) {
-    console.error('Failed to edit message status:', err);
+    console.error('Failed to edit message status:', err.message);
   }
 }
 
@@ -105,16 +142,17 @@ async function sendAdminIncidentNotification(disaster) {
   const desc = disaster.description || 'No description provided.';
   const location = disaster.location_name || disaster.locationName || `Lat: ${disaster.latitude}, Lon: ${disaster.longitude}`;
   const reporter = disaster.createdByName || disaster.reporterName || 'Citizen Reporter';
+  const role = disaster.createdByRole || disaster.reporterRole || 'USER / VOLUNTEER';
 
   const text = 
-`🚨 <b>NEW INCIDENT REPORTED</b> 🚨
+`🚨 <b>NEW DISASTER REQUEST / INCIDENT REPORTED</b> 🚨
 
 <b>ID:</b> <code>#${disaster.id}</code>
 <b>Type:</b> <code>${disaster.type || 'FLOOD'}</code>
 <b>Title:</b> ${escapeHtml(title)}
 <b>Description:</b> ${escapeHtml(desc)}
 <b>Location:</b> ${escapeHtml(location)} (<code>${disaster.latitude}, ${disaster.longitude}</code>)
-<b>Reported By:</b> ${escapeHtml(reporter)}
+<b>Reported By:</b> ${escapeHtml(reporter)} (${escapeHtml(role)})
 <b>Current Status:</b> <code>${disaster.status || 'PENDING'}</code>`;
 
   const payload = {
@@ -133,10 +171,10 @@ async function sendAdminIncidentNotification(disaster) {
 
   try {
     const result = await callTelegramApi('sendMessage', payload);
-    console.log(`📡 [Telegram Bot]: Incident #${disaster.id} notification sent to chat ${adminChatId}`);
+    console.log(`📡 [Telegram Bot]: Incident #${disaster.id} notification sent to Admin chat #${adminChatId}`);
     return result;
   } catch (err) {
-    console.error(`❌ [Telegram Bot]: Failed to send incident #${disaster.id} notification:`, err);
+    console.error(`❌ [Telegram Bot]: Failed to send incident #${disaster.id} notification:`, err.message);
     return null;
   }
 }
@@ -155,7 +193,7 @@ async function sendAdminResourceNotification(resource) {
   const desc = resource.description || resource.resource_name || 'Emergency Supply Post';
   const qty = `${resource.quantity || 1} ${resource.unit || 'units'}`;
   const location = resource.address || resource.location_name || 'Central Command Pool';
-  const provider = resource.providerName || resource.provider_name || 'Relief Agency';
+  const provider = resource.providerName || resource.provider_name || 'Relief Agency / Volunteer';
 
   const text = 
 `📦 <b>NEW RESOURCE OFFERED</b> 📦
@@ -185,24 +223,19 @@ async function sendAdminResourceNotification(resource) {
 
   try {
     const result = await callTelegramApi('sendMessage', payload);
-    console.log(`📡 [Telegram Bot]: Resource #${resource.id} notification sent to chat ${adminChatId}`);
+    console.log(`📡 [Telegram Bot]: Resource #${resource.id} notification sent to Admin chat #${adminChatId}`);
     return result;
   } catch (err) {
-    console.error(`❌ [Telegram Bot]: Failed to send resource #${resource.id} notification:`, err);
+    console.error(`❌ [Telegram Bot]: Failed to send resource #${resource.id} notification:`, err.message);
     return null;
   }
 }
 
 /**
- * Process incoming Telegram Webhook payload (/api/telegram/webhook)
+ * Unified update payload processor (shared by long-polling & Vercel webhook)
  */
-async function handleTelegramWebhook(req, res) {
-  let body = req.body || {};
-  if (typeof body === 'string') {
-    try { body = JSON.parse(body); } catch (e) { body = {}; }
-  }
-
-  // Handle standard message (e.g. /start command to auto-register admin chat ID)
+async function processTelegramUpdate(body) {
+  // Handle standard message (e.g. /start command)
   if (body.message && body.message.chat) {
     const chatId = body.message.chat.id;
     const text = (body.message.text || '').trim();
@@ -211,13 +244,13 @@ async function handleTelegramWebhook(req, res) {
       setAdminChatId(chatId);
       await callTelegramApi('sendMessage', {
         chat_id: chatId,
-        text: `✅ <b>Admin Chat Registered!</b>\n\nYour Chat ID (<code>${chatId}</code>) is now set for incident and resource approval workflows.\n\nYou will receive instant alerts with Approve/Reject buttons when citizens or relief agencies submit new reports.`,
+        text: `✅ <b>Admin Chat Registered!</b>\n\nYour Chat ID (<code>${chatId}</code>) is set for incident and resource approval workflows.\n\nYou will receive instant alerts with Approve/Reject buttons when citizens, users, or volunteers submit new disaster requests.`,
         parse_mode: 'HTML'
       });
-      return sendJsonResponse(res, 200, { success: true, message: 'Admin chat ID registered', chatId });
+      return { success: true, message: 'Admin chat ID registered', chatId };
     }
 
-    return sendJsonResponse(res, 200, { success: true, message: 'Message received' });
+    return { success: true, message: 'Message received' };
   }
 
   // Handle Callback Query (Inline Button Clicks)
@@ -233,12 +266,11 @@ async function handleTelegramWebhook(req, res) {
     // Security Check: Verify admin chat ID
     const configuredAdminChatId = getAdminChatId();
     if (configuredAdminChatId && String(chatId) !== String(configuredAdminChatId)) {
-      console.warn(`🔒 [Telegram Webhook]: Unauthorized callback query from chat_id ${chatId} (Expected: ${configuredAdminChatId})`);
+      console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} (Expected: ${configuredAdminChatId})`);
       await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
-      return sendJsonResponse(res, 403, { success: false, error: 'Unauthorized admin chat_id' });
+      return { success: false, error: 'Unauthorized admin chat_id' };
     }
 
-    // Auto-bind admin chat ID if not set yet
     if (!configuredAdminChatId && chatId) {
       setAdminChatId(chatId);
     }
@@ -268,10 +300,9 @@ async function handleTelegramWebhook(req, res) {
 
     if (!action || isNaN(targetId)) {
       await answerCallbackQuery(callbackId, 'Invalid approval action.');
-      return sendJsonResponse(res, 400, { success: false, error: 'Bad Request', message: 'Invalid callback data format' });
+      return { success: false, error: 'Bad Request', message: 'Invalid callback data format' };
     }
 
-    // Map Action to Target Status: APPROVED -> VERIFIED_ACTIVE, REJECTED -> CANCELLED
     const targetStatus = action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CANCELLED';
 
     try {
@@ -298,9 +329,9 @@ async function handleTelegramWebhook(req, res) {
         await editMessageStatus(chatId, messageId, originalText, statusBadge);
       }
 
-      console.log(`✅ [Telegram Webhook]: ${targetType} #${targetId} updated to ${targetStatus} via Telegram admin approval.`);
+      console.log(`✅ [Telegram Bot]: ${targetType} #${targetId} updated to ${targetStatus} via Telegram admin approval.`);
 
-      return sendJsonResponse(res, 200, {
+      return {
         success: true,
         message: `${targetType} #${targetId} status updated to ${targetStatus}`,
         data: {
@@ -310,19 +341,83 @@ async function handleTelegramWebhook(req, res) {
           status: targetStatus,
           updatedRecord
         }
-      });
+      };
     } catch (err) {
-      console.error(`❌ [Telegram Webhook Error]: Failed to update ${targetType} #${targetId}:`, err);
+      console.error(`❌ [Telegram Bot Error]: Failed to update ${targetType} #${targetId}:`, err.message);
       await answerCallbackQuery(callbackId, `Error updating ${targetType}: ${err.message}`, true);
-      return sendJsonResponse(res, 500, {
+      return {
         success: false,
         error: 'Internal Server Error',
         message: err.message
-      });
+      };
     }
   }
 
-  return sendJsonResponse(res, 200, { success: true, message: 'Webhook endpoint active' });
+  return { success: true, message: 'Update processed' };
+}
+
+/**
+ * Handle HTTP Webhook endpoint (/api/telegram/webhook)
+ */
+async function handleTelegramWebhook(req, res) {
+  let body = req.body || {};
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch (e) { body = {}; }
+  }
+
+  const result = await processTelegramUpdate(body);
+  const statusCode = result.error === 'Unauthorized admin chat_id' ? 403 : (result.success ? 200 : 500);
+
+  return sendJsonResponse(res, statusCode, result);
+}
+
+/**
+ * Start long-polling loop for local development environment
+ */
+function startPollingLoop() {
+  if (pollingInterval) return;
+
+  // Clear any active webhooks so getUpdates works in local mode
+  callTelegramApi('deleteWebhook', { drop_pending_updates: false })
+    .then(() => {
+      console.log('🤖 [Telegram Bot]: Polling mode enabled for local server.');
+    })
+    .catch(err => console.warn('Telegram deleteWebhook warning:', err.message));
+
+  pollingInterval = setInterval(async () => {
+    try {
+      const res = await callTelegramApi('getUpdates', {
+        offset: lastUpdateId + 1,
+        timeout: 1,
+        allowed_updates: ['message', 'callback_query']
+      });
+
+      if (res && res.ok && Array.isArray(res.result) && res.result.length > 0) {
+        for (const update of res.result) {
+          lastUpdateId = Math.max(lastUpdateId, update.update_id);
+          await processTelegramUpdate(update);
+        }
+      }
+    } catch (err) {
+      // Ignore network hiccup logs during polling
+    }
+  }, 2500);
+}
+
+/**
+ * Initialize Telegram Bot on system startup
+ */
+async function initTelegramBot() {
+  console.log('🤖 Initializing Telegram Bot Service...');
+  
+  // Set fallback Admin chat ID
+  setAdminChatId(process.env.TELEGRAM_ADMIN_CHAT_ID || '6868121119');
+
+  // Start polling loop for local server
+  startPollingLoop();
+
+  // Send startup notification to admin
+  await sendStartupNotification();
 }
 
 function sendJsonResponse(res, statusCode, data) {
@@ -347,6 +442,8 @@ function escapeHtml(str) {
 }
 
 module.exports = {
+  initTelegramBot,
+  sendStartupNotification,
   sendAdminIncidentNotification,
   sendAdminResourceNotification,
   handleTelegramWebhook,

@@ -745,6 +745,14 @@ async function loadDisasters() {
       list = list.filter(d => d.type === typeFilter);
     }
 
+    // Safeguard: Deduplicate incidents by ID to prevent duplicate cards in UI
+    const seenIds = new Set();
+    list = list.filter(d => {
+      if (!d.id || seenIds.has(d.id)) return false;
+      seenIds.add(d.id);
+      return true;
+    });
+
     if (list.length === 0) {
       container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 30px;">No disaster incidents match your current filter.</p>`;
       return;
@@ -816,14 +824,18 @@ async function handleStatusUpdateSubmit(e) {
   try {
     const data = await fetchAPI('/incidents/update', {
       method: 'POST',
-      body: { incidentId: disasterId, status: newStatus }
+      body: { id: disasterId, status: newStatus }
     });
 
     closeModal('statusUpdateModal');
     showToast('Status Updated', `Incident #${disasterId} status changed to ${newStatus}`, 'success');
 
-    // Rule 4: Instant UI Update & Refetch
-    loadDisasters();
+    // Rule 6: Instant UI Update & Refetch
+    await loadDisasters();
+    if (currentUser?.role === 'ADMIN') {
+      if (typeof loadAdminReportsTable === 'function') loadAdminReportsTable();
+      if (typeof loadAdminAnalytics === 'function') loadAdminAnalytics();
+    }
   } catch (err) {
     showToast('Update Failed', err.message || 'Update failed. Try again.', 'error');
   } finally {
@@ -1547,7 +1559,7 @@ async function updateAdminInlineStatus(incidentId, newStatus) {
   try {
     await fetchAPI('/incidents/update', {
       method: 'POST',
-      body: { incidentId: incidentId, status: newStatus }
+      body: { id: incidentId, status: newStatus }
     });
 
     showToast('Status Updated', `Report #${incidentId} status updated to '${newStatus}'`, 'success');
@@ -1556,6 +1568,7 @@ async function updateAdminInlineStatus(incidentId, newStatus) {
     if (item) item.status = newStatus;
     renderAdminReportsTable();
     loadAdminAnalytics();
+    loadDisasters();
   } catch (err) {
     showToast('Update Failed', err.message || 'Update failed. Try again.', 'error');
     loadAdminReportsTable();
@@ -1620,6 +1633,41 @@ async function submitAdminEditIncident(e) {
     loadDisasters();
   } catch (err) {
     showToast('Edit Failed', err.message || 'Failed to update incident.', 'error');
+  }
+}
+
+function promptDeleteIncident(incidentId, title) {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
+    return;
+  }
+
+  pendingDeleteIncidentId = incidentId;
+  const msgEl = document.getElementById('adminDeleteConfirmMessage');
+  if (msgEl) {
+    msgEl.textContent = `Are you sure you want to delete report #${incidentId} (${title || 'Incident'})? This action will delete the report from live systems.`;
+  }
+  openModal('adminDeleteConfirmModal');
+}
+
+async function executeDeleteIncident() {
+  if (!pendingDeleteIncidentId) return;
+
+  try {
+    await fetchAPI('/incidents/delete', {
+      method: 'POST',
+      body: { id: pendingDeleteIncidentId }
+    });
+
+    closeModal('adminDeleteConfirmModal');
+    showToast('Incident Deleted', `Disaster report #${pendingDeleteIncidentId} deleted successfully.`, 'success');
+
+    pendingDeleteIncidentId = null;
+    loadAdminReportsTable();
+    loadAdminAnalytics();
+    loadDisasters();
+  } catch (err) {
+    showToast('Delete Failed', err.message || 'Failed to delete disaster report.', 'error');
   }
 }
 

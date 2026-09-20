@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
 
   // Parse body helper
   let body = {};
-  if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
     if (req.body && typeof req.body === 'object') {
       body = req.body;
     } else {
@@ -308,11 +308,21 @@ module.exports = async (req, res) => {
 
     // 6. Update Status
     if ((method === 'POST' || method === 'PATCH' || method === 'PUT') && pathname === '/api/incidents/update') {
-      const incidentId = parseInt(body.incidentId || body.disasterId || body.id);
-      let statusInput = (body.status || 'IN_PROGRESS').trim();
+      const incidentId = parseInt(body.id || body.incidentId || body.disasterId);
+      let statusInput = (body.status || '').trim();
 
       if (!incidentId || isNaN(incidentId)) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required.' });
+      }
+
+      if (!statusInput) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Status is required.' });
+      }
+
+      // SAFEGUARD: Validate id exists before update
+      const existing = await supabaseDb.getDisasterById(incidentId);
+      if (!existing) {
+        return sendJson(res, 404, { success: false, error: 'Not Found', message: `Incident #${incidentId} does not exist.` });
       }
 
       let dbStatus = statusInput.toUpperCase();
@@ -322,10 +332,19 @@ module.exports = async (req, res) => {
       if (statusInput === 'Closed') dbStatus = 'CLOSED';
       if (statusInput === 'Cancelled by Admin' || statusInput === 'CANCELLED_BY_ADMIN' || statusInput === 'CANCELLED') dbStatus = 'CLOSED';
 
+      const ALLOWED_DB_STATUSES = ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'PENDING'];
+      if (!ALLOWED_DB_STATUSES.includes(dbStatus)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Invalid status '${statusInput}'.` });
+      }
+
       const updated = await supabaseDb.updateDisaster(incidentId, {
         status: dbStatus,
         updated_at: new Date().toISOString()
       });
+
+      if (!updated) {
+        return sendJson(res, 404, { success: false, error: 'Not Found', message: `Incident #${incidentId} not found or could not be updated.` });
+      }
 
       return sendJson(res, 200, {
         success: true,
@@ -370,8 +389,10 @@ module.exports = async (req, res) => {
     }
 
     // 6.3 Delete Incident
-    if ((method === 'DELETE' || method === 'POST') && pathname === '/api/incidents/delete') {
-      const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId);
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/incidents/delete' || pathname.startsWith('/api/incidents/delete') || (method === 'DELETE' && (pathname.includes('/incidents/') || pathname.includes('/disasters/'))))) {
+      const parts = pathname.split('/').filter(Boolean);
+      const lastPart = parseInt(parts[parts.length - 1]);
+      const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId || (isNaN(lastPart) ? null : lastPart));
 
       if (!incidentId || isNaN(incidentId)) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required for deletion.' });
