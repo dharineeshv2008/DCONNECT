@@ -357,11 +357,27 @@ const supabaseDb = {
 
   // --- RESOURCES ---
   async getResources() {
-    const { data, error } = await supabase
-      .from('resources')
-      .select('*, users:provider_id(name,role,phone), disasters(title)')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+    let data, error;
+    try {
+      const res = await supabase
+        .from('resources')
+        .select('*, users:provider_id(name,role,phone), disasters(title)')
+        .order('created_at', { ascending: false });
+      data = res.data;
+      error = res.error;
+      if (error) throw error;
+    } catch (err) {
+      if (err.message && (err.message.includes('available_until') || err.message.includes('description') || err.message.includes('schema cache'))) {
+        const res2 = await supabase
+          .from('resources')
+          .select('id, disaster_id, provider_id, resource_type, resource_name, quantity, unit, status, contact_phone, created_at, users:provider_id(name,role,phone), disasters(title)')
+          .order('created_at', { ascending: false });
+        data = res2.data;
+        if (res2.error) throw res2.error;
+      } else {
+        throw err;
+      }
+    }
 
     const now = new Date();
     const expiredIdsToUpdate = [];
@@ -463,13 +479,31 @@ const supabaseDb = {
           status: 'VERIFIED_ACTIVE'
         });
         cleanRes.disaster_id = defaultDisaster.id;
-        const { data: d2, error: e2 } = await supabase
-          .from('resources')
-          .insert([cleanRes])
-          .select();
-        if (e2) throw e2;
-        return d2 && d2.length > 0 ? d2[0] : null;
+        return this.createResource(cleanRes);
       }
+
+      // If available_until or description column does not exist in schema cache:
+      if (err.message && (err.message.includes('available_until') || err.message.includes('description') || err.message.includes('schema cache') || err.code === 'PGRST204')) {
+        console.warn('Fallback inserting resource without missing schema columns:', err.message);
+        const fallbackRes = {
+          disaster_id: cleanRes.disaster_id,
+          provider_id: cleanRes.provider_id,
+          resource_type: cleanRes.resource_type,
+          resource_name: cleanRes.description || cleanRes.resource_name,
+          quantity: cleanRes.quantity,
+          unit: cleanRes.unit,
+          status: cleanRes.status,
+          contact_phone: cleanRes.contact_phone
+        };
+
+        const { data: dFallback, error: eFallback } = await supabase
+          .from('resources')
+          .insert([fallbackRes])
+          .select();
+        if (eFallback) throw eFallback;
+        return dFallback && dFallback.length > 0 ? dFallback[0] : null;
+      }
+
       throw err;
     }
   },
