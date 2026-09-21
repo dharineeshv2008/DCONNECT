@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test:ci": "cross-env NODE_ENV=test jest --runInBand --forceExit",
     "test:e2e": "npx playwright test --config=e2e-playwright/playwright.config.js",
     "test:headed": "npx playwright test --config=e2e-playwright/playwright.config.js --headed",
     "debug:e2e": "node e2e-playwright/debug-monitor.js",
@@ -21,5 +22,16 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
     "pg": "^8.23.0"
+  },
+  "jest": {
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js"
+    ]
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "dotenv": "^18.0.1",
+    "jest": "^30.5.2",
+    "supertest": "^7.2.2"
   }
 }
