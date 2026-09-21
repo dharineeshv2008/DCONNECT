@@ -48,7 +48,17 @@ module.exports = async (req, res) => {
       try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
 
-    const type = body.type || 'FLOOD';
+    const allowedTypes = ['FLOOD', 'FIRE', 'EARTHQUAKE', 'CYCLONE', 'LANDSLIDE', 'TSUNAMI', 'BUILDING_COLLAPSE', 'OTHER'];
+    const rawType = (body.type || 'FLOOD').toUpperCase();
+    if (!allowedTypes.includes(rawType)) {
+      return sendJson(res, 400, {
+        success: false,
+        error: 'Bad Request',
+        message: `Invalid disaster type '${body.type}'. Allowed types: ${allowedTypes.join(', ')}.`
+      });
+    }
+    const type = rawType;
+
     const userLat = parseFloat(body.latitude);
     const userLon = parseFloat(body.longitude);
 

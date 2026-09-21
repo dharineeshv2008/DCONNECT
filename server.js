@@ -384,7 +384,7 @@ const server = http.createServer(async (req, res) => {
       const userLon = parseFloat(rawLon);
 
       // Validate disaster type (Test 13)
-      const allowedTypes = ['FLOOD', 'FIRE', 'EARTHQUAKE', 'CYCLONE', 'LANDSLIDE', 'TSUNAMI', 'OTHER'];
+      const allowedTypes = ['FLOOD', 'FIRE', 'EARTHQUAKE', 'CYCLONE', 'LANDSLIDE', 'TSUNAMI', 'BUILDING_COLLAPSE', 'OTHER'];
       const type = (body.type || 'FLOOD').toUpperCase();
       if (!allowedTypes.includes(type)) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Invalid disaster type '${body.type}'. Allowed types: ${allowedTypes.join(', ')}.` });
