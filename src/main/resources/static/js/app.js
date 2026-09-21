@@ -103,18 +103,15 @@ function initSupabaseRealtime() {
       supabaseClient
         .channel('public:disasters')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'disasters' }, payload => {
-          console.log('🚨 [Realtime]: Disaster change detected:', payload.eventType);
+          console.log('🚨 [Realtime]: Disaster change detected:', payload.eventType, payload.new?.id, payload.new?.status);
           if (payload.eventType === 'INSERT') {
             showToast('New Incident Reported', `🚨 ${payload.new.title} (${payload.new.type})`, 'warning');
           } else if (payload.eventType === 'UPDATE') {
-            showToast('Incident Status Updated', `Disaster #${payload.new.id} status changed to ${payload.new.status}`, 'info');
+            showToast('Incident Status Updated', `Disaster #${payload.new.id} status updated to ${payload.new.status}`, 'info');
           }
-          if (document.getElementById('feedTab')?.classList.contains('active')) {
-            loadDisasters();
-          }
+          if (typeof loadDisasters === 'function') loadDisasters();
           if (currentUser?.role === 'ADMIN') {
             if (typeof loadAdminReportsTable === 'function') loadAdminReportsTable();
-            if (typeof loadAdminPendingDisasters === 'function') loadAdminPendingDisasters();
             if (typeof loadAdminAnalytics === 'function') loadAdminAnalytics();
           }
         })

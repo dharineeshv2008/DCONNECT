@@ -19,6 +19,7 @@
   "author": "Antigravity Engineering",
   "license": "ISC",
   "dependencies": {
-    "@supabase/supabase-js": "^2.116.0"
+    "@supabase/supabase-js": "^2.116.0",
+    "pg": "^8.23.0"
   }
 }

@@ -12,11 +12,36 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+function normalizeDisasterStatus(status) {
+  if (!status) return 'PENDING_VERIFICATION';
+  const upper = String(status).trim().toUpperCase();
+  if (['PENDING', 'PENDING_VERIFICATION', 'UNVERIFIED', 'OPEN'].includes(upper)) {
+    return 'PENDING_VERIFICATION';
+  }
+  if (['VERIFIED_ACTIVE', 'ACTIVE', 'VERIFIED'].includes(upper)) {
+    return 'VERIFIED_ACTIVE';
+  }
+  if (['IN_PROGRESS', 'DISPATCHED'].includes(upper)) {
+    return 'IN_PROGRESS';
+  }
+  if (['CANCELLED_BY_ADMIN', 'CANCELLED', 'REJECTED', 'CLOSED', 'RESOLVED'].includes(upper)) {
+    return 'CANCELLED_BY_ADMIN';
+  }
+  return upper;
+}
+
+function dbStatusForDisaster(status) {
+  const norm = normalizeDisasterStatus(status);
+  if (norm === 'PENDING_VERIFICATION') return 'PENDING';
+  if (norm === 'CANCELLED_BY_ADMIN') return 'CLOSED';
+  return norm;
+}
+
 function sanitizeResourceStatus(input) {
   if (!input) return 'AVAILABLE';
   const upper = String(input).trim().toUpperCase();
   if (upper === 'VERIFIED_ACTIVE') return 'VERIFIED_ACTIVE';
-  if (upper === 'CANCELLED' || upper === 'REJECTED') return 'CANCELLED';
+  if (upper === 'CANCELLED' || upper === 'REJECTED' || upper === 'CANCELLED_BY_ADMIN') return 'CANCELLED';
   if (['ACTIVE', 'AVAILABLE', 'OPEN', 'IN_STOCK'].includes(upper)) return 'AVAILABLE';
   if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED', 'ASSIGNED'].includes(upper)) return 'DISPATCHED';
   if (['EXPIRED', 'EXHAUSTED', 'INACTIVE', 'REMOVED', 'CLOSED', 'DEPLETED'].includes(upper)) return 'EXHAUSTED';
@@ -111,6 +136,91 @@ const supabaseDb = {
   },
 
   // --- INCIDENTS / DISASTERS ---
+  async updateDisasterStatus(disasterId, newStatus, verifiedById = null) {
+    const id = parseInt(disasterId);
+    if (isNaN(id)) {
+      throw new Error(`Invalid disaster ID: ${disasterId}`);
+    }
+
+    const cleanStatus = normalizeDisasterStatus(newStatus);
+    const dbStatus = dbStatusForDisaster(cleanStatus);
+
+    console.log("Updating disaster:", id, cleanStatus);
+
+    const now = new Date().toISOString();
+    const updates = {
+      status: dbStatus,
+      updated_at: now
+    };
+
+    if (cleanStatus === 'VERIFIED_ACTIVE' || cleanStatus === 'CANCELLED_BY_ADMIN') {
+      updates.verified_at = now;
+      if (verifiedById) {
+        const parsedUserId = parseInt(verifiedById);
+        if (!isNaN(parsedUserId)) {
+          updates.verified_by_user_id = parsedUserId;
+        }
+      }
+    }
+
+    let { data, error } = await supabase
+      .from('disasters')
+      .update(updates)
+      .eq('id', id)
+      .select('*, creator:created_by_user_id(name,role)');
+
+    if (error && (error.message?.includes('column') || error.message?.includes('schema cache') || error.code === 'PGRST204')) {
+      console.warn(`⚠️ [updateDisasterStatus Schema Cache Warning]: Extra columns failed: ${error.message}. Retrying status update without extra columns.`);
+      const cleanFallbackUpdates = {
+        status: dbStatus,
+        updated_at: now
+      };
+      const fbRes = await supabase
+        .from('disasters')
+        .update(cleanFallbackUpdates)
+        .eq('id', id)
+        .select('*, creator:created_by_user_id(name,role)');
+      if (!fbRes.error && fbRes.data && fbRes.data.length > 0) {
+        data = fbRes.data;
+        error = null;
+      }
+    }
+
+    if (error && error.code === '23514') {
+      console.warn(`⚠️ [updateDisasterStatus DB Constraint Warning]: status '${dbStatus}' failed constraint. Falling back to CLOSED.`);
+      const fallbackUpdates = { status: 'CLOSED', updated_at: now };
+      const fallbackRes = await supabase
+        .from('disasters')
+        .update(fallbackUpdates)
+        .eq('id', id)
+        .select('*, creator:created_by_user_id(name,role)');
+      if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+        data = fallbackRes.data;
+        error = null;
+      } else {
+        error = fallbackRes.error || error;
+      }
+    }
+
+    if (error) {
+      console.error('❌ [updateDisasterStatus DB Error]:', error.message || error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(`Disaster #${id} not found in database.`);
+    }
+
+    const updatedRecord = data[0];
+    return {
+      ...updatedRecord,
+      status: cleanStatus,
+      updatedStatus: cleanStatus,
+      createdByName: updatedRecord.creator?.name || 'Authorized Responder',
+      createdByRole: updatedRecord.creator?.role || 'PUBLIC'
+    };
+  },
+
   async getAllDisasters(statusFilter = null) {
     let query = supabase
       .from('disasters')
@@ -120,7 +230,7 @@ const supabaseDb = {
     if (statusFilter === 'ALL' || statusFilter === 'all' || statusFilter === 'ADMIN') {
       // Admin Panel: Include all statuses
     } else if (statusFilter) {
-      const dbStatus = (statusFilter === 'PENDING_VERIFICATION') ? 'PENDING' : (statusFilter === 'CANCELLED_BY_ADMIN' ? 'CLOSED' : statusFilter);
+      const dbStatus = dbStatusForDisaster(statusFilter);
       query = query.eq('status', dbStatus);
     } else {
       // Live Disaster Feed: Only SELECT * FROM disasters WHERE status IN ('VERIFIED_ACTIVE', 'IN_PROGRESS')
@@ -131,7 +241,7 @@ const supabaseDb = {
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
-      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status,
+      status: normalizeDisasterStatus(r.status),
       createdByName: r.creator?.name || 'Authorized Responder',
       createdByRole: r.creator?.role || 'PUBLIC'
     }));
@@ -143,13 +253,13 @@ const supabaseDb = {
       .from('disasters')
       .select('*')
       .eq('type', type)
-      .in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS'])
+      .in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'PENDING'])
       .gte('created_at', twentyFourHoursAgo)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
-      status: r.status
+      status: normalizeDisasterStatus(r.status)
     }));
   },
 
@@ -164,14 +274,13 @@ const supabaseDb = {
     const r = data[0];
     return {
       ...r,
-      status: (r.status === 'PENDING') ? 'PENDING_VERIFICATION' : r.status,
+      status: normalizeDisasterStatus(r.status),
       createdByName: r.creator?.name || 'Authorized Responder',
       createdByRole: r.creator?.role || 'PUBLIC'
     };
   },
 
   async createDisaster(disasterData) {
-    // Task 3 & 5: Pre-insert Duplicate Prevention (10km radius check)
     if (disasterData.type && !isNaN(parseFloat(disasterData.latitude)) && !isNaN(parseFloat(disasterData.longitude))) {
       const candidates = await this.getCandidateDisastersForMerge(disasterData.type);
       const userLat = parseFloat(disasterData.latitude);
@@ -188,7 +297,7 @@ const supabaseDb = {
 
         if (dist <= 10.0) {
           console.warn(`⚠️ [createDisaster Deduplication]: Similar incident already exists within ${dist.toFixed(2)}km (#${c.id}). Preventing duplicate creation.`);
-          return { ...c, wasMerged: true, isDuplicate: true };
+          return { ...c, wasMerged: true, isDuplicate: true, status: normalizeDisasterStatus(c.status) };
         }
       }
     }
@@ -205,7 +314,6 @@ const supabaseDb = {
         try {
           const userObj = await this.getUserById(parsedId);
           if (!userObj) {
-            console.warn(`⚠️ [supabaseDb.createDisaster]: User ID ${parsedId} does not exist in users table. Resetting created_by_user_id to null.`);
             validUserId = null;
           } else {
             validUserId = userObj.id;
@@ -216,10 +324,8 @@ const supabaseDb = {
       }
     }
 
-    const requestedStatus = disasterData.status || 'PENDING_VERIFICATION';
-    let dbStatus = requestedStatus;
-    if (requestedStatus === 'PENDING_VERIFICATION') dbStatus = 'PENDING';
-    if (requestedStatus === 'CANCELLED_BY_ADMIN') dbStatus = 'CLOSED';
+    const requestedStatus = normalizeDisasterStatus(disasterData.status || 'PENDING_VERIFICATION');
+    const dbStatus = dbStatusForDisaster(requestedStatus);
 
     const payload = {
       ...disasterData,
@@ -228,7 +334,6 @@ const supabaseDb = {
       created_by_user_id: validUserId || null
     };
 
-    // Task 6: Logging new disaster creation
     console.log("New disaster created:", payload);
 
     const { data, error } = await supabase
@@ -250,6 +355,9 @@ const supabaseDb = {
   },
 
   async editDisaster(id, updates) {
+    if (updates.status !== undefined) {
+      return this.updateDisasterStatus(id, updates.status);
+    }
     const cleanUpdates = {};
     if (updates.description !== undefined) cleanUpdates.description = updates.description;
     if (updates.latitude !== undefined && !isNaN(parseFloat(updates.latitude))) cleanUpdates.latitude = parseFloat(updates.latitude);
@@ -260,13 +368,6 @@ const supabaseDb = {
     if (updates.severity !== undefined) {
       const s = updates.severity.toUpperCase();
       cleanUpdates.severity = (s === 'UNVERIFIED') ? 'LOW' : s;
-    }
-    let requestedStatus = updates.status;
-    if (updates.status !== undefined) {
-      let dbStatus = updates.status;
-      if (dbStatus === 'PENDING_VERIFICATION') dbStatus = 'PENDING';
-      if (dbStatus === 'CANCELLED_BY_ADMIN') dbStatus = 'CLOSED';
-      cleanUpdates.status = dbStatus;
     }
     if (updates.title !== undefined) cleanUpdates.title = updates.title;
 
@@ -279,42 +380,15 @@ const supabaseDb = {
     if (!data || data.length === 0) return null;
     return {
       ...data[0],
-      status: requestedStatus || (data[0].status === 'PENDING' ? 'PENDING_VERIFICATION' : data[0].status)
+      status: normalizeDisasterStatus(data[0].status)
     };
   },
 
   async updateDisaster(id, updates) {
-    const dbUpdates = { ...updates };
-    let requestedStatus = updates.status;
-    if (updates.status) {
-      if (updates.status === 'PENDING_VERIFICATION') dbUpdates.status = 'PENDING';
-      if (updates.status === 'CANCELLED_BY_ADMIN') dbUpdates.status = 'CLOSED';
+    if (updates.status !== undefined) {
+      return this.updateDisasterStatus(id, updates.status, updates.verified_by_user_id || updates.verifiedById);
     }
-
-    let { data, error } = await supabase
-      .from('disasters')
-      .update(dbUpdates)
-      .eq('id', id)
-      .select();
-
-    if (error && error.code === '23514') {
-      const fallbackUpdates = { ...dbUpdates, status: 'CLOSED' };
-      const res = await supabase
-        .from('disasters')
-        .update(fallbackUpdates)
-        .eq('id', id)
-        .select();
-      if (!res.error && res.data && res.data.length > 0) {
-        return { ...res.data[0], status: requestedStatus || 'CANCELLED_BY_ADMIN' };
-      }
-    }
-
-    if (error) throw error;
-    if (!data || data.length === 0) return null;
-    return {
-      ...data[0],
-      status: requestedStatus || (data[0].status === 'PENDING' ? 'PENDING_VERIFICATION' : data[0].status)
-    };
+    return this.editDisaster(id, updates);
   },
 
   async deleteDisaster(id) {
@@ -343,6 +417,7 @@ const supabaseDb = {
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
+      status: 'PENDING_VERIFICATION',
       createdByName: r.creator?.name || 'Citizen Reporter',
       createdByRole: r.creator?.role || 'PUBLIC'
     }));

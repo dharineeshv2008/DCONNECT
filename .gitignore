@@ -20,3 +20,5 @@ Thumbs.db
 
 # Sensitive environment variables (use .env.example instead)
 .env
+scratch/
+

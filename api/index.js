@@ -389,18 +389,16 @@ module.exports = async (req, res) => {
         });
       }
 
-      const updated = await supabaseDb.updateDisaster(incidentId, {
-        status: dbStatus,
-        updated_at: new Date().toISOString()
-      });
-
-      if (!updated) {
-        return sendJson(res, 404, { success: false, error: 'Not Found', message: `Incident #${incidentId} not found or could not be updated.` });
-      }
+      const updated = await supabaseDb.updateDisasterStatus(
+        incidentId,
+        statusInput,
+        body.verifiedById || body.verified_by_user_id || body.adminId
+      );
 
       return sendJson(res, 200, {
         success: true,
-        message: `Incident #${incidentId} status updated to '${dbStatus}'.`,
+        message: `Incident #${incidentId} status updated to '${updated.status}'.`,
+        updatedStatus: updated.status,
         data: updated
       });
     }

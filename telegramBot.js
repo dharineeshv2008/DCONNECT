@@ -309,31 +309,33 @@ async function processTelegramUpdate(body) {
       let updatedRecord = null;
 
       if (targetType === 'INCIDENT') {
-        updatedRecord = await supabaseDb.updateDisaster(targetId, {
-          status: targetStatus,
-          updated_at: new Date().toISOString()
-        });
+        // Requirement 1, 3 & 4: Centralized Status Update call (updates DB & logs)
+        updatedRecord = await supabaseDb.updateDisasterStatus(targetId, targetStatus);
       } else if (targetType === 'RESOURCE') {
         updatedRecord = await supabaseDb.updateResource(targetId, {
           status: targetStatus
         });
       }
 
-      const statusBadge = action === 'APPROVED' ? '✅ APPROVED (VERIFIED_ACTIVE)' : '❌ REJECTED (CANCELLED)';
-      
-      // Answer button spinner immediately
-      await answerCallbackQuery(callbackId, `${targetType} #${targetId} ${action}: status updated to ${targetStatus}`);
+      if (!updatedRecord) {
+        throw new Error(`Failed to update ${targetType} #${targetId}`);
+      }
 
-      // Edit message text and remove buttons to prevent duplicate requests
+      const statusBadge = action === 'APPROVED' ? `✅ APPROVED (${targetStatus})` : `❌ REJECTED (${targetStatus})`;
+
+      // Requirement 3: Wait for API/DB success response BEFORE sending confirmation
+      await answerCallbackQuery(callbackId, `Success: ${targetType} #${targetId} updated to ${targetStatus}`);
+
+      // Edit message text and remove inline buttons to prevent duplicate clicks
       if (chatId && messageId) {
         await editMessageStatus(chatId, messageId, originalText, statusBadge);
       }
 
-      console.log(`✅ [Telegram Bot]: ${targetType} #${targetId} updated to ${targetStatus} via Telegram admin approval.`);
+      console.log(`✅ [Telegram Bot]: ${targetType} #${targetId} verified & updated to ${targetStatus}`);
 
       return {
         success: true,
-        message: `${targetType} #${targetId} status updated to ${targetStatus}`,
+        updatedStatus: targetStatus,
         data: {
           targetType,
           targetId,
@@ -343,12 +345,15 @@ async function processTelegramUpdate(body) {
         }
       };
     } catch (err) {
-      console.error(`❌ [Telegram Bot Error]: Failed to update ${targetType} #${targetId}:`, err.message);
-      await answerCallbackQuery(callbackId, `Error updating ${targetType}: ${err.message}`, true);
+      console.error(`❌ [Telegram Bot Verification Error]: Failed to update ${targetType} #${targetId}:`, err.message || err);
+      
+      // Requirement 7: FAILSAFE - If update fails, show error in Telegram and DO NOT confirm or remove buttons
+      await answerCallbackQuery(callbackId, `❌ Action Failed: ${err.message || 'Could not update status'}`, true);
+
       return {
         success: false,
-        error: 'Internal Server Error',
-        message: err.message
+        error: 'Update Failed',
+        message: err.message || 'Could not update disaster status'
       };
     }
   }
@@ -447,6 +452,7 @@ module.exports = {
   sendAdminIncidentNotification,
   sendAdminResourceNotification,
   handleTelegramWebhook,
+  processTelegramUpdate,
   setAdminChatId,
   getAdminChatId,
   callTelegramApi
