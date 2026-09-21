@@ -24,7 +24,13 @@ function normalizeDisasterStatus(status) {
   if (['IN_PROGRESS', 'DISPATCHED'].includes(upper)) {
     return 'IN_PROGRESS';
   }
-  if (['CANCELLED_BY_ADMIN', 'CANCELLED', 'REJECTED', 'CLOSED', 'RESOLVED'].includes(upper)) {
+  if (['RESOLVED', 'COMPLETED'].includes(upper)) {
+    return 'RESOLVED';
+  }
+  if (['CLOSED', 'ARCHIVED'].includes(upper)) {
+    return 'CLOSED';
+  }
+  if (['CANCELLED_BY_ADMIN', 'CANCELLED', 'REJECTED'].includes(upper)) {
     return 'CANCELLED_BY_ADMIN';
   }
   return upper;
@@ -248,19 +254,33 @@ const supabaseDb = {
   },
 
   async getCandidateDisastersForMerge(type) {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
     const { data, error } = await supabase
       .from('disasters')
       .select('*')
       .eq('type', type)
-      .in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'PENDING'])
-      .gte('created_at', twentyFourHoursAgo)
+      .in('status', ['VERIFIED_ACTIVE', 'IN_PROGRESS', 'PENDING', 'PENDING_VERIFICATION'])
+      .gte('created_at', threeHoursAgo)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
       status: normalizeDisasterStatus(r.status)
     }));
+  },
+
+  async logApprovalAction(adminId, targetId, targetType, action) {
+    try {
+      await supabase.from('approvals').insert([{
+        admin_id: adminId || 1,
+        target_id: targetId,
+        target_type: targetType || 'DISASTER',
+        action: action,
+        created_at: new Date().toISOString()
+      }]);
+    } catch (err) {
+      console.warn('Approvals log notice:', err.message);
+    }
   },
 
   async getDisasterById(id) {
@@ -281,10 +301,12 @@ const supabaseDb = {
   },
 
   async createDisaster(disasterData) {
-    if (disasterData.type && !isNaN(parseFloat(disasterData.latitude)) && !isNaN(parseFloat(disasterData.longitude))) {
-      const candidates = await this.getCandidateDisastersForMerge(disasterData.type);
-      const userLat = parseFloat(disasterData.latitude);
-      const userLon = parseFloat(disasterData.longitude);
+    const { skipDeduplication, ...cleanDisasterData } = disasterData;
+
+    if (!skipDeduplication && cleanDisasterData.type && !isNaN(parseFloat(cleanDisasterData.latitude)) && !isNaN(parseFloat(cleanDisasterData.longitude))) {
+      const candidates = await this.getCandidateDisastersForMerge(cleanDisasterData.type);
+      const userLat = parseFloat(cleanDisasterData.latitude);
+      const userLon = parseFloat(cleanDisasterData.longitude);
 
       for (const c of candidates) {
         const R = 6371.0;
@@ -302,10 +324,10 @@ const supabaseDb = {
       }
     }
 
-    const rawSeverity = (disasterData.severity || 'UNVERIFIED').toUpperCase();
+    const rawSeverity = (cleanDisasterData.severity || 'UNVERIFIED').toUpperCase();
     const dbSeverity = (rawSeverity === 'UNVERIFIED') ? 'LOW' : rawSeverity;
 
-    let validUserId = disasterData.created_by_user_id;
+    let validUserId = cleanDisasterData.created_by_user_id;
     if (validUserId) {
       const parsedId = parseInt(validUserId);
       if (isNaN(parsedId)) {
@@ -324,11 +346,11 @@ const supabaseDb = {
       }
     }
 
-    const requestedStatus = normalizeDisasterStatus(disasterData.status || 'PENDING_VERIFICATION');
+    const requestedStatus = normalizeDisasterStatus(cleanDisasterData.status || 'PENDING_VERIFICATION');
     const dbStatus = dbStatusForDisaster(requestedStatus);
 
     const payload = {
-      ...disasterData,
+      ...cleanDisasterData,
       severity: dbSeverity,
       status: dbStatus,
       created_by_user_id: validUserId || null
