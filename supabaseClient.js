@@ -159,38 +159,11 @@ const supabaseDb = {
       updated_at: now
     };
 
-    if (cleanStatus === 'VERIFIED_ACTIVE' || cleanStatus === 'CANCELLED_BY_ADMIN') {
-      updates.verified_at = now;
-      if (verifiedById) {
-        const parsedUserId = parseInt(verifiedById);
-        if (!isNaN(parsedUserId)) {
-          updates.verified_by_user_id = parsedUserId;
-        }
-      }
-    }
-
     let { data, error } = await supabase
       .from('disasters')
       .update(updates)
       .eq('id', id)
       .select('*, creator:created_by_user_id(name,role)');
-
-    if (error && (error.message?.includes('column') || error.message?.includes('schema cache') || error.code === 'PGRST204')) {
-      console.warn(`⚠️ [updateDisasterStatus Schema Cache Warning]: Extra columns failed: ${error.message}. Retrying status update without extra columns.`);
-      const cleanFallbackUpdates = {
-        status: dbStatus,
-        updated_at: now
-      };
-      const fbRes = await supabase
-        .from('disasters')
-        .update(cleanFallbackUpdates)
-        .eq('id', id)
-        .select('*, creator:created_by_user_id(name,role)');
-      if (!fbRes.error && fbRes.data && fbRes.data.length > 0) {
-        data = fbRes.data;
-        error = null;
-      }
-    }
 
     if (error && error.code === '23514') {
       console.warn(`⚠️ [updateDisasterStatus DB Constraint Warning]: status '${dbStatus}' failed constraint. Falling back to CLOSED.`);

@@ -20,17 +20,9 @@ function isValidStatusTransition(currentStatus, targetStatus) {
   const t = (targetStatus || '').toUpperCase();
   if (c === t) return true;
 
-  const allowedTransitions = {
-    'PENDING': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
-    'PENDING_VERIFICATION': ['VERIFIED_ACTIVE', 'CANCELLED_BY_ADMIN', 'CLOSED'],
-    'VERIFIED_ACTIVE': ['IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
-    'IN_PROGRESS': ['RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN'],
-    'RESOLVED': ['CLOSED', 'CANCELLED_BY_ADMIN'],
-    'CLOSED': ['CANCELLED_BY_ADMIN'],
-    'CANCELLED_BY_ADMIN': ['CLOSED']
-  };
-
-  return allowedTransitions[c] ? allowedTransitions[c].includes(t) : true;
+  // Allowed target statuses for disaster records
+  const validTargets = ['PENDING_VERIFICATION', 'VERIFIED_ACTIVE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED_BY_ADMIN', 'PENDING'];
+  return validTargets.includes(t);
 }
 
 function sendJson(res, statusCode, data) {

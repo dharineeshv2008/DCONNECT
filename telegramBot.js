@@ -23,43 +23,64 @@ function setAdminChatId(chatId) {
 }
 
 /**
- * Low-level HTTP client for Telegram API
+ * Low-level HTTP client for Telegram API with exponential backoff retry
  */
-function callTelegramApi(method, payload) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(payload);
-    const options = {
-      hostname: 'api.telegram.org',
-      port: 443,
-      path: `/bot${BOT_TOKEN}/${method}`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      }
-    };
+async function callTelegramApi(method, payload, maxRetries = 3) {
+  const data = JSON.stringify(payload);
+  const baseUrlStr = process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org';
+  const targetUrl = `${baseUrlStr.replace(/\/$/, '')}/bot${BOT_TOKEN}/${method}`;
+  const parsedUrl = new URL(targetUrl);
 
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(body);
-          resolve(parsed);
-        } catch (e) {
-          resolve({ ok: false, description: 'Invalid JSON from Telegram API' });
-        }
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const isHttps = parsedUrl.protocol === 'https:';
+        const httpModule = isHttps ? https : require('http');
+
+        const options = {
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port || (isHttps ? 443 : 80),
+          path: `${parsedUrl.pathname}${parsedUrl.search}`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data)
+          }
+        };
+
+        const req = httpModule.request(options, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              resolve(parsed);
+            } catch (e) {
+              resolve({ ok: false, description: 'Invalid JSON from Telegram API' });
+            }
+          });
+        });
+
+        req.on('error', (err) => {
+          reject(err);
+        });
+
+        req.write(data);
+        req.end();
       });
-    });
 
-    req.on('error', (err) => {
-      console.error('Telegram API error:', err.message);
-      reject(err);
-    });
-
-    req.write(data);
-    req.end();
-  });
+      return result;
+    } catch (err) {
+      const isNetworkErr = err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND' || err.message?.includes('socket disconnected');
+      if (attempt < maxRetries && isNetworkErr) {
+        const delayMs = attempt * 500;
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      console.warn(`⚠️ [Telegram Bot]: API call '${method}' failed (attempt ${attempt}/${maxRetries}):`, err.message);
+      return { ok: false, description: err.message, error: err };
+    }
+  }
 }
 
 /**
