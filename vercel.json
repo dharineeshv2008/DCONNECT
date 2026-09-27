@@ -6,6 +6,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/((?!assets/|css/|js/|favicon|background).*)",
       "destination": "/index.html"
     }
