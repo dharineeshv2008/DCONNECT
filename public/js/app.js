@@ -1895,12 +1895,10 @@ async function executeDeleteAllIncidents() {
   const btn = document.getElementById('confirmDeleteAllIncidentsBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
   try {
-    let data;
-    try {
-      data = await fetchAPI('/admin/delete-all-incidents', { method: 'POST' });
-    } catch (e) {
-      data = await fetchAPI('/incidents/delete-all', { method: 'DELETE' });
-    }
+    const data = await fetchAPI('/admin/reset-data', {
+      method: 'POST',
+      body: { target: 'disasters' }
+    });
     closeModal('adminDeleteAllIncidentsModal');
     showToast('All Disasters Deleted', 'All disaster reports have been cleared from live systems.', 'success');
     loadAdminData();
@@ -1924,12 +1922,10 @@ async function executeDeleteAllResources() {
   const btn = document.getElementById('confirmDeleteAllResourcesBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
   try {
-    let data;
-    try {
-      data = await fetchAPI('/admin/delete-all-resources', { method: 'POST' });
-    } catch (e) {
-      data = await fetchAPI('/resources/delete-all', { method: 'DELETE' });
-    }
+    const data = await fetchAPI('/admin/reset-data', {
+      method: 'POST',
+      body: { target: 'resources' }
+    });
     closeModal('adminDeleteAllResourcesModal');
     showToast('All Resources Deleted', 'All emergency resource posts have been cleared.', 'success');
     loadAdminResourcesTable();
@@ -1954,7 +1950,10 @@ async function executeResetSystemData() {
   const btn = document.getElementById('confirmResetSystemBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
   try {
-    const data = await fetchAPI('/admin/reset-system', { method: 'POST' });
+    const data = await fetchAPI('/admin/reset-system', {
+      method: 'POST',
+      body: { target: 'all' }
+    });
     closeModal('adminResetSystemModal');
     showToast('System Reset Complete', 'All operational test data has been safely cleared.', 'success');
     loadAdminData();
