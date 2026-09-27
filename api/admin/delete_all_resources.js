@@ -9,13 +9,14 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    await supabaseDb.resetSystemData();
+    const deleted = await supabaseDb.deleteAllResources();
     return res.status(200).json({
       success: true,
-      message: 'System reset completed successfully'
+      message: 'All emergency resource supply posts deleted successfully.',
+      count: deleted ? deleted.length : 0
     });
   } catch (err) {
-    console.error('System reset error:', err);
+    console.error('Delete all resources error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 };
