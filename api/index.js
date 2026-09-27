@@ -870,6 +870,16 @@ module.exports = async (req, res) => {
       return sendJson(res, 200, { success: true, message: 'Disaster closed', data: updated });
     }
 
+    if ((method === 'POST' || method === 'DELETE') && (pathname === '/api/admin/delete-all-incidents' || pathname === '/api/admin/delete-all-disasters' || pathname === '/api/admin/delete_all_incidents' || pathname === '/api/admin/delete_all_disasters')) {
+      const deleted = await supabaseDb.deleteAllDisasters();
+      return sendJson(res, 200, { success: true, message: 'All disaster incidents deleted successfully.', count: deleted ? deleted.length : 0 });
+    }
+
+    if ((method === 'POST' || method === 'DELETE') && (pathname === '/api/admin/delete-all-resources' || pathname === '/api/admin/delete_all_resources')) {
+      const deleted = await supabaseDb.deleteAllResources();
+      return sendJson(res, 200, { success: true, message: 'All emergency resource supply posts deleted successfully.', count: deleted ? deleted.length : 0 });
+    }
+
     if (method === 'POST' && (pathname === '/api/admin/reset-system' || pathname === '/api/admin/reset-data' || pathname === '/api/admin/system-reset' || pathname === '/api/admin/reset_system')) {
       if (global.isSystemResetInProgress) {
         return sendJson(res, 429, { success: false, error: 'Too Many Requests', message: 'System reset execution already in progress.' });
