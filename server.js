@@ -132,6 +132,45 @@ const server = http.createServer(async (req, res) => {
       return handleTelegramWebhook(req, res);
     }
 
+    // Disaster Severity Prediction ML Proxy Endpoint (/predict & /api/predict)
+    if (pathname === '/predict' || pathname === '/api/predict') {
+      if (method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type'
+        });
+        return res.end();
+      }
+      const body = await parseBody(req);
+      const postData = JSON.stringify(body);
+      const proxyReq = http.request({
+        hostname: '127.0.0.1',
+        port: 8000,
+        path: '/predict',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, (proxyRes) => {
+        let respData = '';
+        proxyRes.on('data', chunk => { respData += chunk; });
+        proxyRes.on('end', () => {
+          try {
+            sendJson(res, proxyRes.statusCode, JSON.parse(respData));
+          } catch(e) {
+            sendJson(res, 500, { error: 'Failed to parse ML response' });
+          }
+        });
+      });
+      proxyReq.on('error', (err) => {
+        sendJson(res, 503, { error: 'ML Prediction Service Unavailable', details: err.message });
+      });
+      proxyReq.write(postData);
+      return proxyReq.end();
+    }
+
     // 0. Config
     if (method === 'GET' && pathname === '/api/config') {
       return sendJson(res, 200, {
