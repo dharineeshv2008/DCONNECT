@@ -321,7 +321,7 @@ async function processTelegramUpdate(body) {
     if (configuredAdminChatId && !matchesAdmin && (process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID)) {
       console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} / from_id ${fromId} (Expected: ${configuredAdminChatId})`);
       await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
-      return { success: false, error: 'Unauthorized admin chat_id' };
+      return { success: true, ignored: true, message: 'Unauthorized callback query ignored' };
     }
 
     if (chatId) {
@@ -444,7 +444,7 @@ async function handleTelegramWebhook(req, res) {
   body = body || {};
 
   const result = await processTelegramUpdate(body);
-  const statusCode = result.error === 'Unauthorized admin chat_id' ? 403 : (result.success ? 200 : 500);
+  const statusCode = result.error === 'Unauthorized admin chat_id' ? 403 : 200;
 
   return sendJsonResponse(res, statusCode, result);
 }

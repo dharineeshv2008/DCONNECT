@@ -891,7 +891,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      if (method === 'GET' && pathname === '/api/admin/pending-users') {
+      if (method === 'GET' && (pathname === '/api/admin/pending-users' || pathname === '/api/admin/pending_users')) {
         const list = await supabaseDb.getPendingUsers();
         return sendJson(res, 200, {
           success: true,
@@ -906,7 +906,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      if (method === 'POST' && pathname === '/api/admin/approve-user') {
+      if (method === 'POST' && (pathname === '/api/admin/approve-user' || pathname === '/api/admin/approve_user')) {
         const body = await parseBody(req);
         const actionStatus = body.action === 'APPROVED' ? 'ACTIVE' : 'REJECTED';
         const updated = await supabaseDb.updateUser(body.userId, { status: actionStatus });
@@ -919,9 +919,42 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      if (method === 'GET' && pathname === '/api/admin/pending-disasters') {
+      if (method === 'POST' && (pathname === '/api/admin/reject-user' || pathname === '/api/admin/reject_user')) {
+        const body = await parseBody(req);
+        const updated = await supabaseDb.updateUser(body.userId, { status: 'REJECTED' });
+        await supabaseDb.logApprovalAction(caller ? caller.id : 1, body.userId, 'USER', 'REJECTED');
+
+        return sendJson(res, 200, {
+          success: true,
+          message: 'User rejected',
+          data: updated
+        });
+      }
+
+      if (method === 'GET' && (pathname === '/api/admin/pending-disasters' || pathname === '/api/admin/pending_disasters')) {
         const list = await supabaseDb.getPendingDisasters();
         return sendJson(res, 200, { success: true, data: list });
+      }
+
+      if (method === 'POST' && (pathname === '/api/admin/approve-disaster' || pathname === '/api/admin/approve_disaster')) {
+        const body = await parseBody(req);
+        const actionStatus = body.action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CLOSED';
+        const updated = await supabaseDb.updateDisaster(body.disasterId, { status: actionStatus });
+        return sendJson(res, 200, {
+          success: true,
+          message: `Disaster ${body.action ? body.action.toLowerCase() : 'approved'}`,
+          data: updated
+        });
+      }
+
+      if (method === 'POST' && (pathname === '/api/admin/reject-disaster' || pathname === '/api/admin/reject_disaster')) {
+        const body = await parseBody(req);
+        const updated = await supabaseDb.updateDisaster(body.disasterId, { status: 'CLOSED' });
+        return sendJson(res, 200, {
+          success: true,
+          message: 'Disaster rejected',
+          data: updated
+        });
       }
 
       if (method === 'GET' && pathname === '/api/admin/analytics') {
