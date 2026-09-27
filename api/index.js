@@ -138,26 +138,56 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Resolve pathname accurately across Vercel rewrites & local environments
+  // 1. Resolve pathname accurately across Vercel serverless functions, rewrites, and local environments
   const parsedUrl = url.parse(req.url, true);
-  let pathname = req.__explicitPath || '';
+  let rawPath = req.__explicitPath || '';
 
-  if (!pathname) {
-    if (parsedUrl.query && parsedUrl.query.__path) {
-      pathname = '/api/' + String(parsedUrl.query.__path).replace(/^\/+/, '');
-    } else {
-      const rawUrl = req.headers['x-forwarded-uri'] || 
-                     req.headers['x-matched-path'] || 
-                     req.headers['x-original-url'] || 
-                     req.headers['x-real-path'] || 
-                     req.url;
-      pathname = url.parse(rawUrl, true).pathname || '/api';
+  // 2. Query param __path from vercel.json rewrite: /api/index.js?__path=$1
+  if (!rawPath && parsedUrl.query && parsedUrl.query.__path) {
+    rawPath = '/api/' + String(parsedUrl.query.__path);
+  }
+
+  // 3. Fallback to standard request headers and req.url (NEVER USE x-matched-path because it is the filesystem lambda path)
+  if (!rawPath) {
+    const rawUrl = req.headers['x-forwarded-uri'] || 
+                   req.headers['x-original-url'] || 
+                   req.headers['x-real-path'] || 
+                   req.url || 
+                   '/api';
+    rawPath = url.parse(String(rawUrl), true).pathname || '/api';
+  }
+
+  // 4. Strip any query parameters or hash from rawPath
+  if (rawPath.includes('?')) {
+    rawPath = rawPath.split('?')[0];
+  }
+  if (rawPath.includes('#')) {
+    rawPath = rawPath.split('#')[0];
+  }
+
+  // 5. If rawPath is literally '/api/index.js' or '/api/index', recover from x-now-route-matches or req.url
+  if (rawPath === '/api/index.js' || rawPath === '/api/index' || rawPath === '/api') {
+    if (req.headers['x-now-route-matches']) {
+      const matchHeader = String(req.headers['x-now-route-matches']);
+      if (matchHeader.includes('1=')) {
+        const routeVal = matchHeader.split('1=')[1].split('&')[0];
+        rawPath = '/api/' + decodeURIComponent(routeVal);
+      }
+    }
+    if ((rawPath === '/api/index.js' || rawPath === '/api/index') && req.url) {
+      const uPath = url.parse(req.url, true).pathname;
+      if (uPath && uPath !== '/api/index.js' && uPath !== '/api/index') {
+        rawPath = uPath;
+      }
     }
   }
 
-  // Normalize pathname: remove trailing .js, /index.js, trailing slash
+  // 6. Clean and normalize
+  let pathname = rawPath.trim();
   if (pathname.endsWith('/index.js')) {
     pathname = pathname.slice(0, -9);
+  } else if (pathname.endsWith('/index')) {
+    pathname = pathname.slice(0, -6);
   } else if (pathname.endsWith('.js')) {
     pathname = pathname.slice(0, -3);
   }
@@ -165,10 +195,10 @@ module.exports = async (req, res) => {
     pathname = pathname.slice(0, -1);
   }
   if (!pathname.startsWith('/api')) {
-    pathname = '/api' + pathname;
+    pathname = '/api' + (pathname.startsWith('/') ? pathname : '/' + pathname);
   }
-  if (pathname === '/api' && parsedUrl.query && parsedUrl.query.__path) {
-    pathname = '/api/' + String(parsedUrl.query.__path).replace(/^\/+/, '');
+  if (pathname.includes('?')) {
+    pathname = pathname.split('?')[0];
   }
 
   // Parse body helper
