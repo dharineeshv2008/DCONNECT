@@ -46,11 +46,9 @@ function dbStatusForDisaster(status) {
 function sanitizeResourceStatus(input) {
   if (!input) return 'AVAILABLE';
   const upper = String(input).trim().toUpperCase();
-  if (upper === 'VERIFIED_ACTIVE') return 'VERIFIED_ACTIVE';
-  if (upper === 'CANCELLED' || upper === 'REJECTED' || upper === 'CANCELLED_BY_ADMIN') return 'CANCELLED';
-  if (['ACTIVE', 'AVAILABLE', 'OPEN', 'IN_STOCK'].includes(upper)) return 'AVAILABLE';
+  if (['VERIFIED_ACTIVE', 'ACTIVE', 'AVAILABLE', 'OPEN', 'IN_STOCK', 'APPROVED'].includes(upper)) return 'AVAILABLE';
+  if (['CANCELLED', 'REJECTED', 'CANCELLED_BY_ADMIN', 'EXPIRED', 'EXHAUSTED', 'INACTIVE', 'REMOVED', 'CLOSED', 'DEPLETED'].includes(upper)) return 'EXHAUSTED';
   if (['DISPATCHED', 'IN_PROGRESS', 'ALLOCATED', 'ASSIGNED'].includes(upper)) return 'DISPATCHED';
-  if (['EXPIRED', 'EXHAUSTED', 'INACTIVE', 'REMOVED', 'CLOSED', 'DEPLETED'].includes(upper)) return 'EXHAUSTED';
   return upper;
 }
 

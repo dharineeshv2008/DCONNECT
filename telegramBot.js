@@ -26,7 +26,7 @@ function setAdminChatId(chatId) {
  * Low-level HTTP client for Telegram API with exponential backoff retry
  */
 async function callTelegramApi(method, payload, maxRetries = 3) {
-  const data = JSON.stringify(payload);
+  const data = (payload !== undefined && payload !== null) ? JSON.stringify(payload) : '';
   const baseUrlStr = process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org';
   const targetUrl = `${baseUrlStr.replace(/\/$/, '')}/bot${BOT_TOKEN}/${method}`;
   const parsedUrl = new URL(targetUrl);
@@ -65,7 +65,9 @@ async function callTelegramApi(method, payload, maxRetries = 3) {
           reject(err);
         });
 
-        req.write(data);
+        if (data) {
+          req.write(data);
+        }
         req.end();
       });
 
@@ -136,12 +138,11 @@ async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
  */
 async function editMessageStatus(chatId, messageId, originalText, statusText) {
   try {
-    const updatedText = `${originalText}\n\n📌 <b>DECISION:</b> ${statusText}`;
+    const updatedText = `${originalText}\n\n📌 DECISION: ${statusText}`;
     return await callTelegramApi('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: updatedText,
-      parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [] }
     });
   } catch (err) {
@@ -256,6 +257,8 @@ async function sendAdminResourceNotification(resource) {
  * Unified update payload processor (shared by long-polling & Vercel webhook)
  */
 async function processTelegramUpdate(body) {
+  if (!body) return { success: true, message: 'No body provided' };
+
   // Handle standard message (e.g. /start command)
   if (body.message && body.message.chat) {
     const chatId = body.message.chat.id;
@@ -278,49 +281,54 @@ async function processTelegramUpdate(body) {
   if (body.callback_query) {
     const callbackQuery = body.callback_query;
     const callbackId = callbackQuery.id;
-    const data = callbackQuery.data || '';
+    const data = (callbackQuery.data || '').trim();
     const message = callbackQuery.message || {};
     const chatId = message.chat ? message.chat.id : (callbackQuery.from ? callbackQuery.from.id : null);
+    const fromId = callbackQuery.from ? callbackQuery.from.id : null;
     const messageId = message.message_id;
     const originalText = message.text || '';
 
     // Security Check: Verify admin chat ID
     const configuredAdminChatId = getAdminChatId();
-    if (configuredAdminChatId && String(chatId) !== String(configuredAdminChatId)) {
-      console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} (Expected: ${configuredAdminChatId})`);
+    const matchesAdmin = [chatId, fromId, message.chat?.id].some(id => id && String(id) === String(configuredAdminChatId));
+
+    if (configuredAdminChatId && !matchesAdmin && (process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID)) {
+      console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} / from_id ${fromId} (Expected: ${configuredAdminChatId})`);
       await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
       return { success: false, error: 'Unauthorized admin chat_id' };
     }
 
-    if (!configuredAdminChatId && chatId) {
+    if (chatId) {
       setAdminChatId(chatId);
     }
 
-    // Parse callback data: inc_approve_<id>, inc_reject_<id>, res_approve_<id>, res_reject_<id>
+    // Flexible parsing for callback data:
+    // Formats: inc_approve_123, inc_reject_123, res_approve_123, res_reject_123, approve:123, reject:123, etc.
     let action = null; // 'APPROVED' or 'REJECTED'
-    let targetType = null; // 'INCIDENT' or 'RESOURCE'
+    let targetType = 'INCIDENT'; // 'INCIDENT' or 'RESOURCE'
     let targetId = null;
 
-    if (data.startsWith('inc_approve_')) {
+    const lowerData = data.toLowerCase();
+
+    if (lowerData.includes('approve')) {
       action = 'APPROVED';
-      targetType = 'INCIDENT';
-      targetId = parseInt(data.replace('inc_approve_', ''));
-    } else if (data.startsWith('inc_reject_')) {
+    } else if (lowerData.includes('reject') || lowerData.includes('deny')) {
       action = 'REJECTED';
-      targetType = 'INCIDENT';
-      targetId = parseInt(data.replace('inc_reject_', ''));
-    } else if (data.startsWith('res_approve_')) {
-      action = 'APPROVED';
-      targetType = 'RESOURCE';
-      targetId = parseInt(data.replace('res_approve_', ''));
-    } else if (data.startsWith('res_reject_')) {
-      action = 'REJECTED';
-      targetType = 'RESOURCE';
-      targetId = parseInt(data.replace('res_reject_', ''));
     }
 
-    if (!action || isNaN(targetId)) {
-      await answerCallbackQuery(callbackId, 'Invalid approval action.');
+    if (lowerData.includes('res') || lowerData.includes('resource')) {
+      targetType = 'RESOURCE';
+    } else {
+      targetType = 'INCIDENT';
+    }
+
+    const numericMatch = data.match(/\d+/);
+    if (numericMatch) {
+      targetId = parseInt(numericMatch[0], 10);
+    }
+
+    if (!action || !targetId || isNaN(targetId)) {
+      await answerCallbackQuery(callbackId, 'Invalid approval action format.');
       return { success: false, error: 'Bad Request', message: 'Invalid callback data format' };
     }
 
@@ -330,11 +338,11 @@ async function processTelegramUpdate(body) {
       let updatedRecord = null;
 
       if (targetType === 'INCIDENT') {
-        // Requirement 1, 3 & 4: Centralized Status Update call (updates DB & logs)
         updatedRecord = await supabaseDb.updateDisasterStatus(targetId, targetStatus);
       } else if (targetType === 'RESOURCE') {
+        const resStatus = action === 'APPROVED' ? 'AVAILABLE' : 'EXHAUSTED';
         updatedRecord = await supabaseDb.updateResource(targetId, {
-          status: targetStatus
+          status: resStatus
         });
       }
 
@@ -342,9 +350,12 @@ async function processTelegramUpdate(body) {
         throw new Error(`Failed to update ${targetType} #${targetId}`);
       }
 
+      // Audit log approval action in approvals table
+      await supabaseDb.logApprovalAction(1, targetId, targetType, action);
+
       const statusBadge = action === 'APPROVED' ? `✅ APPROVED (${targetStatus})` : `❌ REJECTED (${targetStatus})`;
 
-      // Requirement 3: Wait for API/DB success response BEFORE sending confirmation
+      // Confirm to Telegram UI
       await answerCallbackQuery(callbackId, `Success: ${targetType} #${targetId} updated to ${targetStatus}`);
 
       // Edit message text and remove inline buttons to prevent duplicate clicks
@@ -368,13 +379,12 @@ async function processTelegramUpdate(body) {
     } catch (err) {
       console.error(`❌ [Telegram Bot Verification Error]: Failed to update ${targetType} #${targetId}:`, err.message || err);
       
-      // Requirement 7: FAILSAFE - If update fails, show error in Telegram and DO NOT confirm or remove buttons
       await answerCallbackQuery(callbackId, `❌ Action Failed: ${err.message || 'Could not update status'}`, true);
 
       return {
         success: false,
         error: 'Update Failed',
-        message: err.message || 'Could not update disaster status'
+        message: err.message || 'Could not update status'
       };
     }
   }
@@ -386,10 +396,25 @@ async function processTelegramUpdate(body) {
  * Handle HTTP Webhook endpoint (/api/telegram/webhook)
  */
 async function handleTelegramWebhook(req, res) {
-  let body = req.body || {};
+  let body = req.body;
+
+  // Handle case where body is not pre-parsed (standard Node http.createServer)
+  if (!body && req && typeof req.on === 'function') {
+    let raw = '';
+    await new Promise((resolve) => {
+      req.on('data', chunk => raw += chunk.toString());
+      req.on('end', () => {
+        try { body = JSON.parse(raw); } catch (e) { body = {}; }
+        resolve();
+      });
+      req.on('error', () => { body = {}; resolve(); });
+    });
+  }
+
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch (e) { body = {}; }
   }
+  body = body || {};
 
   const result = await processTelegramUpdate(body);
   const statusCode = result.error === 'Unauthorized admin chat_id' ? 403 : (result.success ? 200 : 500);
