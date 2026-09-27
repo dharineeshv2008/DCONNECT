@@ -1895,7 +1895,7 @@ async function executeDeleteAllIncidents() {
   const btn = document.getElementById('confirmDeleteAllIncidentsBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
   try {
-    const data = await fetchAPI('/admin/reset-data', {
+    const data = await fetchAPI('/admin/reset-data?target=disasters', {
       method: 'POST',
       body: { target: 'disasters' }
     });
@@ -1922,7 +1922,7 @@ async function executeDeleteAllResources() {
   const btn = document.getElementById('confirmDeleteAllResourcesBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
   try {
-    const data = await fetchAPI('/admin/reset-data', {
+    const data = await fetchAPI('/admin/reset-data?target=resources', {
       method: 'POST',
       body: { target: 'resources' }
     });
@@ -1950,7 +1950,7 @@ async function executeResetSystemData() {
   const btn = document.getElementById('confirmResetSystemBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
   try {
-    const data = await fetchAPI('/admin/reset-system', {
+    const data = await fetchAPI('/admin/reset-system?target=all', {
       method: 'POST',
       body: { target: 'all' }
     });

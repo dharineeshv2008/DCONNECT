@@ -9,8 +9,14 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   let body = {};
-  if (req.body && typeof req.body === 'object') {
-    body = req.body;
+  if (req.body) {
+    if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      body = req.body;
+    } else if (typeof req.body === 'string') {
+      try { body = JSON.parse(req.body); } catch (e) { body = {}; }
+    } else if (Buffer.isBuffer(req.body)) {
+      try { body = JSON.parse(req.body.toString('utf-8')); } catch (e) { body = {}; }
+    }
   } else {
     let raw = '';
     await new Promise((resolve) => {
@@ -23,7 +29,8 @@ module.exports = async (req, res) => {
     });
   }
 
-  const target = String(body.target || req.query?.target || req.query?.type || 'all').toLowerCase();
+  const queryTarget = req.query ? (req.query.target || req.query.type) : null;
+  const target = String(body.target || queryTarget || 'all').trim().toLowerCase();
 
   try {
     if (target === 'disasters' || target === 'incidents') {
