@@ -47,6 +47,13 @@ async function fetchAPI(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
   const defaultHeaders = { 'Content-Type': 'application/json' };
   
+  // Attach token from localStorage or state
+  const token = localStorage.getItem('token') || (currentUser && currentUser.token);
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+    defaultHeaders['X-Auth-Token'] = token;
+  }
+  
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
     options.body = JSON.stringify(options.body);
   }
@@ -412,11 +419,15 @@ function restoreSession() {
   if (stored) {
     try {
       currentUser = JSON.parse(stored);
+      if (currentUser && currentUser.token && !localStorage.getItem('token')) {
+        localStorage.setItem('token', currentUser.token);
+      }
       showDashboardApp();
       updateUserUI();
       loadDisasters();
     } catch (e) {
       localStorage.removeItem('dconnect_user');
+      localStorage.removeItem('token');
       showAuthLanding();
     }
   } else {
@@ -465,6 +476,7 @@ function updateUserUI() {
 function logout() {
   currentUser = null;
   localStorage.removeItem('dconnect_user');
+  localStorage.removeItem('token');
   hideAllErrorViews();
   showAuthLanding();
   showToast('Logged Out', 'You have been safely signed out.', 'info');
@@ -523,6 +535,9 @@ async function handleLandingLogin(e) {
     });
 
     currentUser = data.data;
+    if (currentUser && currentUser.token) {
+      localStorage.setItem('token', currentUser.token);
+    }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     
     document.getElementById('landingLoginPassword').value = '';
@@ -567,6 +582,9 @@ async function handleRegister(e) {
     });
 
     currentUser = data.data;
+    if (currentUser && currentUser.token) {
+      localStorage.setItem('token', currentUser.token);
+    }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     closeModal('registerModal');
     
