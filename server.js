@@ -7,7 +7,7 @@ const { supabaseDb } = require('./supabaseClient');
 const { initTelegramBot, handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification, syncTelegramMessageStatus } = require('./telegramBot');
 
 const PORT = process.env.PORT || 8000;
-const STATIC_DIR = path.join(__dirname, 'src', 'main', 'resources', 'static');
+const STATIC_DIR = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : path.join(__dirname, 'src', 'main', 'resources', 'static');
 
 // In-memory active user sessions: token -> userObject
 const userSessions = new Map();
