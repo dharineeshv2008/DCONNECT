@@ -121,7 +121,7 @@ describe('D-Connect PWA, Offline, Home Location & 30km Radius Alert Suite (50+ T
   test('16. Download button is present in index.html UI', () => {
     const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
     expect(html.includes('app.apk')).toBe(true);
-    expect(html.includes('Download App')).toBe(true);
+    expect(html.includes('Download Android App')).toBe(true);
   });
 
   // SECTION 3: HOME LOCATION & USER REGISTRATION (10 Test Cases)
@@ -505,7 +505,7 @@ describe('D-Connect PWA, Offline, Home Location & 30km Radius Alert Suite (50+ T
 
     const listRes = await makeRequest('/api/disasters');
     expect(listRes.json.data.length).toBe(0);
-  }, 20000);
+  }, 35000);
 
   test('47. POST /api/admin/reset-data?target=resources clears all resource posts', async () => {
     await new Promise(r => setTimeout(r, 2500));

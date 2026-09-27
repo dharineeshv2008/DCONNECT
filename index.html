@@ -214,6 +214,20 @@
           New to D-Connect? <a href="#" onclick="openRegisterModal()">Register Now</a>
         </div>
 
+        <!-- Mobile-Friendly APK Download CTA Card -->
+        <div class="landing-apk-download-box" style="margin-top: 18px; padding: 14px 16px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; text-align: center; backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+          <div style="font-size: 0.8rem; font-weight: 700; color: #a7f3d0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>📱</span> <span>D-Connect Mobile App for Android</span>
+          </div>
+          <a href="downloads/app.apk" download="app-release.apk" class="btn-download-app-link" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 16px; background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; font-weight: 700; font-size: 0.92rem; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transition: transform 0.15s ease, box-shadow 0.15s ease;">
+            <span style="font-size: 1.1rem;">📥</span>
+            <span>Download Android App (.apk)</span>
+          </a>
+          <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 8px;">
+            Android 8.0+ Compatible &bull; Fast Emergency Offline Mode
+          </div>
+        </div>
+
         <div class="auth-bottom-tagline">
           DISASTER RESPONSE &bull; HUMAN SUPPORT &bull; A SAFER WORLD
         </div>
@@ -239,7 +253,6 @@
       
       <div class="user-status-bar">
         <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          <a href="downloads/app.apk" download="app.apk" class="btn btn-sm" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; font-weight: 700; border-radius: 6px; padding: 6px 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;" title="Download Android Web Wrapper APK">📥 Download App for Android</a>
           <span id="userBadgeRole" class="badge badge-admin">ADMIN</span>
           <span id="userNameDisplay" style="font-weight: 700; font-size: 0.95rem; color: var(--primary-dark);">Super Admin</span>
           <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>

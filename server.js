@@ -273,7 +273,16 @@ const server = http.createServer(async (req, res) => {
         });
       });
       proxyReq.on('error', (err) => {
-        sendJson(res, 503, { error: 'ML Prediction Service Unavailable', details: err.message });
+        const desc = (body.description || '').toLowerCase();
+        let severity = 'MEDIUM';
+        if (/trapped|collapse|dying|urgent|casualty|fatal/i.test(desc)) {
+          severity = 'CRITICAL';
+        } else if (/flood|fire|landslide|cyclone|tsunami|severe|emergency/i.test(desc)) {
+          severity = 'HIGH';
+        } else if (/low|minor|water|supplies/i.test(desc)) {
+          severity = 'LOW';
+        }
+        return sendJson(res, 200, { success: true, severity: severity, source: 'rule_engine_fallback' });
       });
       proxyReq.write(postData);
       return proxyReq.end();

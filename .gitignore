@@ -23,4 +23,10 @@ Thumbs.db
 scratch/
 __pycache__/
 
+# Android Build Tools & SDK
+android-sdk/
+apk_build/
+tools/
+classpath_argfile.txt
+*.py
 
