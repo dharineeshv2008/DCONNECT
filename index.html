@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D-Connect | Disaster Management Coordination App</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="shortcut icon" type="image/png" href="assets/logo.png">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+  <!-- No Internet State Banner -->
+  <div id="offlineBanner">
+    ⚠️ Network connection lost! Working in offline mode. Reconnecting...
+  </div>
+
+  <!-- Realtime Toast Notifications Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ==============================================================================
+       SPLIT SCREEN LANDING & AUTHENTICATION (Matching Reference UI)
+       ============================================================================== -->
+  <div id="authLandingScreen" class="auth-hero-wrapper">
+    
+    <!-- LEFT SIDE: Hero Visuals & Animated Helicopter -->
+    <div class="auth-hero-left">
+      <div class="hero-backdrop-scenery"></div>
+      
+      <!-- Animated Rescue Helicopter Stage -->
+      <div class="helicopter-sky-stage">
+        <div class="rescue-helicopter">
+          <!-- Helicopter SVG Graphic with animated spinning rotors -->
+          <svg viewBox="0 0 180 90" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Main Rotor Blades -->
+            <g class="heli-main-rotor">
+              <line x1="10" y1="12" x2="160" y2="12" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+              <line x1="30" y1="12" x2="140" y2="12" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+              <circle cx="85" cy="12" r="4" fill="#0f172a" />
+            </g>
+            <rect x="83" y="12" width="4" height="10" fill="#334155" />
+
+            <!-- Helicopter Body -->
+            <path d="M45,46 Q50,22 90,22 L120,24 Q145,26 150,45 Q152,60 125,62 L60,62 Q45,60 45,46 Z" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+            <!-- Red Emergency Stripe -->
+            <path d="M50,46 Q70,40 120,40 L145,46 L140,52 L55,52 Z" fill="#dc2626" />
+            <!-- Cockpit Windows -->
+            <path d="M115,28 Q138,30 142,44 L115,44 Z" fill="#38bdf8" opacity="0.85" stroke="#0f172a" stroke-width="1.5"/>
+            <path d="M85,26 L110,26 L110,44 L85,44 Z" fill="#0284c7" opacity="0.8" />
+
+            <!-- Tail Boom & Fin -->
+            <path d="M45,38 L15,42 L12,30 L6,30 L10,50 L18,46 L45,48 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>
+            <!-- Tail Rotor -->
+            <g class="heli-tail-rotor">
+              <line x1="5" y1="44" x2="25" y2="44" stroke="#ffffff" stroke-width="2.5" />
+              <circle cx="15" cy="44" r="2.5" fill="#dc2626" />
+            </g>
+
+            <!-- Landing Skids -->
+            <line x1="60" y1="62" x2="55" y2="72" stroke="#334155" stroke-width="2.5" />
+            <line x1="115" y1="62" x2="110" y2="72" stroke="#334155" stroke-width="2.5" />
+            <line x1="45" y1="72" x2="135" y2="72" stroke="#0f172a" stroke-width="3.5" stroke-linecap="round"/>
+          </svg>
+
+          <!-- Rescue Winch Wire & Hook -->
+          <div class="heli-rescue-wire">
+            <div class="heli-rescue-hook"></div>
+          </div>
+
+          <!-- Dynamic Searchlight Beam -->
+          <div class="heli-searchlight"></div>
+        </div>
+      </div>
+
+      <!-- Hero Header & Branding -->
+      <div>
+        <div class="hero-header-tag">PEOPLE • RESPONSE • RESILIENCE</div>
+        <h1 class="hero-main-title">
+          Disaster<br>
+          <span>Management</span><br>
+          Coordination App
+        </h1>
+        <div class="hero-sub-title">
+          Report &bull; Coordinate &bull; Respond &bull; Save Lives
+        </div>
+        <div class="hero-quote">
+          “Stronger Communities, Safer Tomorrows”
+        </div>
+      </div>
+
+      <!-- 4 Strategic Feature Cards -->
+      <div class="hero-features-grid">
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-blue">📍</div>
+          <div class="hero-feat-info">
+            <h4>Smart Reporting</h4>
+            <p>Report disasters with browser GPS location (Lat/Long) and Haversine deduplication.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-green">👥</div>
+          <div class="hero-feat-info">
+            <h4>Volunteer Support</h4>
+            <p>Join missions, accept tasks, track relief progress, and make an impact.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-red">🛡️</div>
+          <div class="hero-feat-info">
+            <h4>Resource Coordination</h4>
+            <p>Share and request essential food, water, medical supplies, and equipment.</p>
+          </div>
+        </div>
+
+        <div class="hero-feat-card">
+          <div class="hero-feat-icon icon-purple">📊</div>
+          <div class="hero-feat-info">
+            <h4>Real-time Updates</h4>
+            <p>Stay informed with live incident pipelines, discussion feeds, and alerts.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Footer Badges -->
+      <div class="hero-footer-badges">
+        <span>👥 People Together</span>
+        <span>🍃 Safer Communities</span>
+        <span>🤍 Stronger Tomorrow</span>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE: D-Connect Login & Role Selector Card -->
+    <div class="auth-hero-right">
+      <div class="auth-card-container">
+        <div class="auth-card-top-decoration"></div>
+
+        <!-- Brand Logo Header -->
+        <div class="auth-card-brand">
+          <img src="assets/logo.png" alt="D-Connect Logo" class="auth-brand-logo">
+          <h2 class="auth-brand-title">D-Connect</h2>
+          <p class="auth-brand-tagline">Disaster Management Coordination App</p>
+        </div>
+
+        <!-- Role Selector Tabs -->
+        <div class="role-tabs-bar" id="loginRoleTabs">
+          <button type="button" class="role-tab-item active" onclick="selectLoginRole('USER', this)">
+            <span class="role-tab-icon">👤</span>
+            <span>User</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('VOLUNTEER', this)">
+            <span class="role-tab-icon">🦺</span>
+            <span>Volunteer</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('NGO', this)">
+            <span class="role-tab-icon">👥</span>
+            <span>NGO</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('GOVERNMENT_AGENCY', this)">
+            <span class="role-tab-icon">🏛️</span>
+            <span>Government</span>
+          </button>
+          <button type="button" class="role-tab-item" onclick="selectLoginRole('ADMIN', this)">
+            <span class="role-tab-icon">⚙️</span>
+            <span>Admin</span>
+          </button>
+        </div>
+
+        <div id="landingLoginAlert"></div>
+
+        <!-- Phone + Password Manual Login Form (Strict No-Autofill) -->
+        <form id="landingLoginForm" autocomplete="off" onsubmit="handleLandingLogin(event)">
+          <div class="auth-input-group">
+            <span class="input-icon">📞</span>
+            <input 
+              type="tel" 
+              id="landingLoginPhone" 
+              class="auth-input-control" 
+              placeholder="Enter your phone number" 
+              autocomplete="off" 
+              inputmode="numeric" 
+              maxlength="10" 
+              pattern="[0-9]{10}"
+              oninput="handleLoginInputChange()"
+              required>
+          </div>
+
+          <div class="auth-input-group">
+            <span class="input-icon">🔒</span>
+            <input 
+              type="password" 
+              id="landingLoginPassword" 
+              class="auth-input-control" 
+              placeholder="Enter your password" 
+              autocomplete="new-password"
+              oninput="handleLoginInputChange()"
+              required>
+          </div>
+
+          <div id="loginInputHelper" class="input-hint-msg" style="display: none;"></div>
+
+          <button type="submit" id="landingLoginBtn" class="btn-auth-submit" disabled>
+            <span id="loginBtnSpinner" class="spinner-icon" style="display: none;"></span>
+            <span id="loginBtnText">Login ➔</span>
+          </button>
+        </form>
+
+        <div class="auth-card-footer">
+          New to D-Connect? <a href="#" onclick="openRegisterModal()">Register Now</a>
+        </div>
+
+        <div class="auth-bottom-tagline">
+          DISASTER RESPONSE &bull; HUMAN SUPPORT &bull; A SAFER WORLD
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==============================================================================
+       MAIN COORDINATION DASHBOARD APP (Rendered upon Auth)
+       ============================================================================== -->
+  <div id="mainDashboardApp" style="display: none;">
+
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="logo-section" onclick="switchTab('feedTab')">
+        <img src="assets/logo.png" alt="Logo" class="header-brand-img">
+        <div class="logo-title">
+          <h1>D-Connect Coordination</h1>
+          <p>Real-time Emergency Pipeline & Response Network</p>
+        </div>
+      </div>
+      
+      <div class="user-status-bar">
+        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px;">
+          <span id="userBadgeRole" class="badge badge-admin">ADMIN</span>
+          <span id="userNameDisplay" style="font-weight: 700; font-size: 0.95rem; color: var(--primary-dark);">Super Admin</span>
+          <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="app-nav" id="appNav">
+      <button class="nav-btn active" onclick="switchTab('feedTab')">📡 Live Disasters</button>
+      <button class="nav-btn" onclick="switchTab('reportTab')">⚠️ Report Incident</button>
+      <button class="nav-btn" onclick="switchTab('volunteerTab')">🤝 Volunteer Missions</button>
+      <button class="nav-btn" onclick="switchTab('resourceTab')">📦 Emergency Resources</button>
+      <button class="nav-btn" id="adminNavBtn" style="display: none;" onclick="switchTab('adminTab')">🛡️ Admin Command Center</button>
+    </nav>
+
+    <!-- Main View Container -->
+    <main class="main-container">
+
+      <!-- Approval Pending Page View (403 for unapproved NGO/Gov) -->
+      <div id="approvalPendingView" class="error-page-container">
+        <div class="error-icon">⏳</div>
+        <h2 class="error-title">Account Approval Pending</h2>
+        <p class="error-text">
+          Your NGO / Government Agency account has been submitted. For public safety and verified coordination, administrative approval is required before you can publish reports or manage resources.
+        </p>
+        <div class="alert alert-warning" id="pendingOrgDetails">
+          Organization: <strong id="pendingOrgName">Red Cross</strong> | Status: <strong>PENDING_APPROVAL</strong>
+        </div>
+        <button class="btn btn-primary" onclick="checkApprovalStatus()">Refresh Approval Status</button>
+        <button class="btn btn-outline" style="margin-left: 10px;" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Access Denied Page View (403) -->
+      <div id="accessDeniedView" class="error-page-container">
+        <div class="error-icon">🚫</div>
+        <h2 class="error-title">403 - Access Denied</h2>
+        <p class="error-text">You do not have administrative permission to view or execute actions in this section.</p>
+        <button class="btn btn-primary" onclick="switchTab('feedTab')">Return to Disaster Feed</button>
+      </div>
+
+      <!-- 404 Page Not Found View -->
+      <div id="notFoundView" class="error-page-container">
+        <div class="error-icon">🔍</div>
+        <h2 class="error-title">404 - Incident Not Found</h2>
+        <p class="error-text">The disaster incident or coordination resource you requested does not exist or has been archived.</p>
+        <button class="btn btn-primary" onclick="switchTab('feedTab')">Back to Live Feed</button>
+      </div>
+
+      <!-- 500 Server Error View -->
+      <div id="serverErrorView" class="error-page-container">
+        <div class="error-icon">💥</div>
+        <h2 class="error-title">500 - System Error</h2>
+        <p class="error-text">Something went wrong communicating with the backend server. Please try again shortly.</p>
+        <button class="btn btn-primary" onclick="reloadCurrentData()">Retry Request</button>
+      </div>
+
+      <!-- TAB 1: Live Disasters Feed -->
+      <section id="feedTab" class="tab-pane active">
+        <div class="geo-capture-box">
+          <div class="geo-info">
+            📍 <strong>Browser GPS Geolocation:</strong> <span id="geoStatusText">Detecting live coordinates...</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="captureBrowserLocation()">Refresh GPS</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🚨 Active Incidents & Disaster Pipeline</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <select id="feedTypeFilter" class="form-control" style="width: 160px; padding: 6px;" onchange="loadDisasters()">
+                <option value="">All Types</option>
+                <option value="FLOOD">Flood</option>
+                <option value="EARTHQUAKE">Earthquake</option>
+                <option value="FIRE">Fire</option>
+                <option value="CYCLONE">Cyclone</option>
+                <option value="LANDSLIDE">Landslide</option>
+                <option value="BUILDING_COLLAPSE">Collapse</option>
+                <option value="OTHER">Other</option>
+              </select>
+              <select id="feedStatusFilter" class="form-control" style="width: 160px; padding: 6px;" onchange="loadDisasters()">
+                <option value="" selected>All Statuses</option>
+                <option value="VERIFIED_ACTIVE">Verified Active</option>
+                <option value="PENDING">Pending Verification</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="CLOSED">Closed</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="disasterFeedList">
+            <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading incident reports...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Report Incident -->
+      <section id="reportTab" class="tab-pane">
+        <div class="card" style="max-width: 760px; margin: 0 auto;">
+          <div class="card-header">
+            <div class="card-title">📢 Submit Disaster Incident Report</div>
+          </div>
+
+          <div class="alert alert-info">
+            💡 <strong>Haversine Merge Engine Active:</strong> Reports of the same disaster type within <strong>10 km</strong> and <strong>3 hours</strong> are automatically deduplicated and merged into the active incident.
+          </div>
+
+          <div id="reportAlertBox"></div>
+
+          <form id="disasterReportForm" onsubmit="handleDisasterSubmit(event)">
+            <div class="grid-2">
+              <div class="form-group">
+                <label>Disaster Type *</label>
+                <select id="reportDisasterType" class="form-control" required>
+                  <option value="FLOOD">🌊 Flood / Waterlogging</option>
+                  <option value="EARTHQUAKE">🏚️ Earthquake / Tremors</option>
+                  <option value="FIRE">🔥 Fire Outbreak</option>
+                  <option value="CYCLONE">🌪️ Cyclone / Severe Storm</option>
+                  <option value="LANDSLIDE">⛰️ Landslide</option>
+                  <option value="BUILDING_COLLAPSE">🏢 Building / Bridge Collapse</option>
+                  <option value="OTHER">⚠️ Other Emergency</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Incident Title *</label>
+                <input type="text" id="reportTitle" class="form-control" placeholder="e.g. Flash Flooding at North Bridge" required>
+              </div>
+
+              <div class="form-group">
+                <label>Incident Location Landmark / Address *</label>
+                <input type="text" id="reportLocationName" class="form-control" placeholder="e.g. Near Gandhi Circle, Sector 4" required>
+              </div>
+
+              <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 14px; font-weight: 600; padding: 10px;" onclick="openLocationPicker('report')">
+                📍 Select Incident Location on Interactive Map
+              </button>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Latitude *</label>
+                  <input type="number" step="any" id="reportLatitude" class="form-control" placeholder="e.g. 13.0827" required>
+                </div>
+                <div class="form-group">
+                  <label>Longitude *</label>
+                  <input type="number" step="any" id="reportLongitude" class="form-control" placeholder="e.g. 80.2707" required>
+                </div>
+              </div>
+
+            <div class="form-group">
+              <label>Situation Description *</label>
+              <textarea id="reportDescription" rows="4" class="form-control" placeholder="Describe water level, trapped persons, blocked roads, medical urgency..." required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" style="padding: 13px; font-size: 1rem;">
+              🚨 Dispatch Incident Report
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 3: Volunteer Missions -->
+      <section id="volunteerTab" class="tab-pane">
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🎯 Assigned Rescue & Relief Missions</div>
+            </div>
+            <div id="volunteerAssignmentsList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading missions...</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">👷 Registered Volunteers Directory</div>
+            </div>
+            <div id="volunteersDirectoryList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading volunteers...</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB 4: Emergency Resources -->
+      <section id="resourceTab" class="tab-pane">
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📦 Provide Emergency Resources</div>
+            </div>
+            <form id="resourceForm" onsubmit="handleResourceSubmit(event)">
+              <div class="form-group">
+                <label>Resource Category *</label>
+                <select id="resType" class="form-control" required>
+                  <option value="FOOD">🍞 Food & Rations</option>
+                  <option value="WATER">💧 Clean Drinking Water</option>
+                  <option value="MEDICAL">💊 Medical & First Aid Kits</option>
+                  <option value="SHELTER">⛺ Tarpaulins & Tents</option>
+                  <option value="RESCUE_EQUIPMENT">🛟 Boats & Rescue Gear</option>
+                  <option value="TRANSPORT">🚚 Transport Vehicles</option>
+                  <option value="CLOTHING">👕 Blankets & Warm Clothes</option>
+                  <option value="OTHER">📦 Other Supplies</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Resource Description / Details *</label>
+                <textarea id="resDescription" class="form-control" rows="3" placeholder="e.g. 500 Ready-to-eat Packets, clean & sealed, packaged 2 hours ago." required></textarea>
+              </div>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Quantity *</label>
+                  <input type="number" id="resQty" class="form-control" min="1" placeholder="e.g. 500" required>
+                </div>
+                <div class="form-group">
+                  <label>Unit of Measure *</label>
+                  <input type="text" id="resUnit" class="form-control" placeholder="e.g. packets / boxes / litres" required>
+                </div>
+              </div>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label style="margin: 0; font-weight: 600;">Available Until (Expiry)</label>
+                    <label style="font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-dark, #334155); display: inline-flex; align-items: center; gap: 4px;">
+                      <input type="checkbox" id="resNoExpiryToggle" onchange="toggleNoExpiry('resource')"> No Expiry
+                    </label>
+                  </div>
+                  <input type="datetime-local" id="resAvailableUntil" class="form-control">
+                </div>
+                <div class="form-group">
+                  <label>Status *</label>
+                  <select id="resStatus" class="form-control" required>
+                    <option value="AVAILABLE" selected>🟢 AVAILABLE</option>
+                    <option value="DISPATCHED">🚚 DISPATCHED</option>
+                    <option value="EXHAUSTED">🔴 EXHAUSTED / EXPIRED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Pickup Location / Address *</label>
+                <input type="text" id="resAddress" class="form-control" placeholder="e.g. Relief Warehouse Gate 3, Central Stadium" required>
+              </div>
+
+              <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 14px; font-weight: 600; padding: 10px;" onclick="openLocationPicker('resource')">
+                📍 Select Pickup Location on Interactive Map
+              </button>
+
+              <div class="grid-2">
+                <div class="form-group">
+                  <label>Latitude *</label>
+                  <input type="number" step="any" id="resLatitude" class="form-control" placeholder="e.g. 13.0827" required value="13.0827">
+                </div>
+                <div class="form-group">
+                  <label>Longitude *</label>
+                  <input type="number" step="any" id="resLongitude" class="form-control" placeholder="e.g. 80.2707" required value="80.2707">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Contact Phone for Pickup</label>
+                <input type="text" id="resPhone" class="form-control" placeholder="Leave empty to use account phone">
+              </div>
+
+              <button type="submit" class="btn btn-secondary btn-block">Add to Supply Pool</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📊 Available Supplies in Emergency Pool</div>
+            </div>
+            <div id="resourcePoolList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading inventory...</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB 5: Admin Command Center (Redesigned Table View & Filter System) -->
+      <section id="adminTab" class="tab-pane">
+        
+        <div class="grid-4" style="margin-bottom: 20px;">
+          <div class="kpi-card">
+            <div class="kpi-label">Active Disasters</div>
+            <div class="kpi-value" id="kpiActiveDisasters">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Reports Merged</div>
+            <div class="kpi-value" id="kpiReportsAggregated">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active Volunteers</div>
+            <div class="kpi-value" id="kpiActiveVolunteers">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Pending Verifications</div>
+            <div class="kpi-value" id="kpiPendingApprovals">0</div>
+          </div>
+        </div>
+
+        <!-- Emergency Command Actions Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 18px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <strong style="color: var(--text-main); font-size: 0.95rem;">⚡ Admin Actions:</strong>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadAdminData()" title="Reload all admin tables">🔄 Refresh</button>
+            <button type="button" id="deleteAllDisastersBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllIncidents()" title="Delete all reported disaster incidents">🗑️ Delete All Disasters</button>
+            <button type="button" id="deleteAllResourcesBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllResources()" title="Delete all emergency resource supply posts">📦 Delete All Resources</button>
+            <button type="button" id="resetSystemDataBtn" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: #fca5a5;" onclick="promptResetSystemData()" title="Wipe all test records & reset system">⚠️ Reset System Data</button>
+          </div>
+        </div>
+
+        <!-- Filter System Top Bar -->
+        <div class="admin-filter-bar">
+          <div class="admin-filter-group" style="flex: 2; min-width: 220px;">
+            <label>Search Reports</label>
+            <input type="text" id="adminSearchInput" class="admin-filter-control" placeholder="🔍 Search location, title, or reporter..." oninput="onAdminSearchInput()">
+          </div>
+          <div class="admin-filter-group">
+            <label>Status</label>
+            <select id="adminStatusFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Statuses</option>
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION</option>
+              <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE</option>
+              <option value="IN_PROGRESS">🟡 IN_PROGRESS</option>
+              <option value="RESOLVED">🟢 RESOLVED</option>
+              <option value="CLOSED">📁 CLOSED</option>
+              <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <label>Disaster Type</label>
+            <select id="adminTypeFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Types</option>
+              <option value="FLOOD">🌊 FLOOD</option>
+              <option value="FIRE">🔥 FIRE</option>
+              <option value="CYCLONE">🌀 CYCLONE</option>
+              <option value="EARTHQUAKE">🏚️ EARTHQUAKE</option>
+              <option value="LANDSLIDE">⛰️ LANDSLIDE</option>
+              <option value="OTHER">📦 OTHER</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <label>Reporter Role</label>
+            <select id="adminRoleFilter" class="admin-filter-control" onchange="renderAdminReportsTable()">
+              <option value="">All Roles</option>
+              <option value="USER">Citizen (USER)</option>
+              <option value="VOLUNTEER">Volunteer</option>
+              <option value="GOVERNMENT_AGENCY">Government Agency</option>
+              <option value="ADMIN">Admin</option>
+              <option value="PUBLIC">Public</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Main Reports Table View -->
+        <div class="admin-table-container">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th>Reported By</th>
+                <th>Role</th>
+                <th>Status (Inline Select)</th>
+                <th>Priority</th>
+                <th>Reports</th>
+                <th>Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminReportsTableBody">
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                  Loading incident reports from Supabase database...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <!-- Pagination Footer -->
+          <div class="admin-table-footer">
+            <span id="adminTablePaginationInfo">Showing 0 of 0 reports</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button id="adminPrevPageBtn" class="btn btn-outline btn-sm" onclick="changeAdminPage(-1)" disabled>◀ Prev</button>
+              <span id="adminCurrentPageLabel" style="font-weight: 700; color: var(--text-main);">Page 1</span>
+              <button id="adminNextPageBtn" class="btn btn-outline btn-sm" onclick="changeAdminPage(1)" disabled>Next ▶</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Organization Approvals & Verifications -->
+        <div class="grid-2" style="margin-top: 24px;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🏢 Pending Organization Approvals</div>
+            </div>
+            <div id="adminPendingUsersList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending organizations.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚠️ Pending Citizen Disaster Reports</div>
+            </div>
+            <div id="adminPendingDisastersList">
+              <p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Emergency Resources Management Table -->
+        <div class="card" style="margin-top: 24px;">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-title">📦 Emergency Resources Supply Posts</div>
+            <button class="btn btn-outline btn-sm" onclick="loadAdminResourcesTable()">🔄 Refresh Resources</button>
+          </div>
+          <div class="admin-table-container">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th>Provider</th>
+                  <th>Qty / Unit</th>
+                  <th>Available Until (Expiry)</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminResourcesTableBody">
+                <tr>
+                  <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    Loading resource supply posts...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Register Modal -->
+  <div id="registerModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title">📝 Register New Account</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('registerModal')">✕</button>
+      </div>
+
+      <div id="registerAlertBox"></div>
+
+      <form onsubmit="handleRegister(event)">
+        <div class="form-group">
+          <label>Full Name *</label>
+          <input type="text" id="regName" class="form-control" placeholder="e.g. Rahul Sharma" required>
+        </div>
+        <div class="form-group">
+          <label>Phone Number *</label>
+          <input type="text" id="regPhone" class="form-control" placeholder="10-15 digit phone number" required>
+        </div>
+        <div class="form-group">
+          <label>Password *</label>
+          <input type="password" id="regPassword" class="form-control" placeholder="Minimum 6 characters" required>
+        </div>
+        <div class="form-group">
+          <label>Account Role *</label>
+          <select id="regRole" class="form-control" onchange="toggleOrgFields()" required>
+            <option value="USER">User (General Public - Direct Access)</option>
+            <option value="VOLUNTEER">Volunteer (Direct Access)</option>
+            <option value="NGO">NGO Organization (Requires Admin Approval)</option>
+            <option value="GOVERNMENT_AGENCY">Government Agency (Requires Admin Approval)</option>
+          </select>
+        </div>
+
+        <div id="orgFields" style="display: none;">
+          <div class="form-group">
+            <label>Organization / Agency Name *</label>
+            <input type="text" id="regOrgName" class="form-control" placeholder="e.g. Red Cross Disaster Unit">
+          </div>
+          <div class="form-group">
+            <label>Registration / Badge Number *</label>
+            <input type="text" id="regOrgRegNo" class="form-control" placeholder="e.g. NGO-IND-8839">
+          </div>
+        </div>
+
+        <div id="volunteerFields" style="display: none;">
+          <div class="form-group">
+            <label>Volunteer Skills / Expertise</label>
+            <input type="text" id="regSkills" class="form-control" placeholder="e.g. First Aid, Swimming, Boat Driving, Medical">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Complete Registration</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Discussion & Comments Modal -->
+  <div id="discussionModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title" id="discussionModalTitle">💬 Disaster Coordination Discussion</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('discussionModal')">✕</button>
+      </div>
+
+      <div id="commentsContainer" style="max-height: 320px; overflow-y: auto; margin-bottom: 16px;"></div>
+
+      <form onsubmit="handlePostComment(event)">
+        <div class="form-group">
+          <textarea id="newCommentText" rows="3" class="form-control" placeholder="Add ground update, request resources, or coordinate rescue..." required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Post Message</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Task Assign Modal -->
+  <div id="taskAssignModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title">🎯 Assign Rescue Mission to Volunteer</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('taskAssignModal')">✕</button>
+      </div>
+
+      <form onsubmit="handleAssignTaskSubmit(event)">
+        <input type="hidden" id="assignDisasterId">
+        <div class="form-group">
+          <label>Select Volunteer *</label>
+          <select id="assignVolunteerSelect" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label>Task Title *</label>
+          <input type="text" id="assignTaskTitle" class="form-control" placeholder="e.g. Distribute Drinking Water Packs" required>
+        </div>
+        <div class="form-group">
+          <label>Task Instructions & Priority *</label>
+          <textarea id="assignTaskDesc" rows="3" class="form-control" placeholder="Specific coordinates, safety precautions, contact persons..." required></textarea>
+        </div>
+                <button type="submit" class="btn btn-primary btn-block">Confirm Assignment</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Status Update Modal (Clean Dropdown: VERIFIED_ACTIVE, IN_PROGRESS, CLOSED, CANCELLED_BY_ADMIN) -->
+  <div id="statusUpdateModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="card-header">
+        <h3 class="card-title">⚙️ Update Incident Status</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('statusUpdateModal')">✕</button>
+      </div>
+
+      <form onsubmit="handleStatusUpdateSubmit(event)">
+        <input type="hidden" id="statusModalDisasterId">
+        <div class="form-group">
+          <label>Incident Name</label>
+          <input type="text" id="statusModalDisasterTitle" class="form-control" readonly style="background: #f8fafc; font-weight: 700;">
+        </div>
+        <div class="form-group">
+          <label>Select Operational Status *</label>
+            <select id="statusModalSelect" class="form-control" required style="font-weight: 700; padding: 10px; cursor: pointer;">
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION (Awaiting Admin Verification)</option>
+              <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE (Confirmed Disaster)</option>
+              <option value="IN_PROGRESS">🟡 IN_PROGRESS (Relief Operations Active)</option>
+              <option value="RESOLVED">🟢 RESOLVED (Relief Operations Completed)</option>
+              <option value="CLOSED">📁 CLOSED (Incident Resolved & Archived)</option>
+              <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN (Cancelled / False Alarm)</option>
+            </select>
+        </div>
+        <button type="submit" id="statusUpdateSubmitBtn" class="btn btn-primary btn-block">Update Status</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Double Verification: Step 1 Modal -->
+  <div id="doubleConfirmStep1Modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title" id="doubleConfirmStep1Title">Confirm Action</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('doubleConfirmStep1Modal')">✕</button>
+      </div>
+      <p id="doubleConfirmStep1Message" style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        This is a sensitive action. Are you sure?
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('doubleConfirmStep1Modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="handleDoubleConfirmStep1Continue()">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Double Verification: Step 2 Modal (Type CONFIRM) -->
+  <div id="doubleConfirmStep2Modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">Security Verification</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('doubleConfirmStep2Modal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 12px 0 16px 0; font-size: 0.9rem;">
+        Type <strong>CONFIRM</strong> in uppercase below to authorize this operation:
+      </p>
+      <form onsubmit="handleDoubleConfirmStep2Submit(event)">
+        <div class="form-group">
+          <input type="text" id="doubleConfirmTextInput" class="form-control" placeholder="Type CONFIRM" required autocomplete="off" style="font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('doubleConfirmStep2Modal')">Cancel</button>
+          <button type="submit" id="doubleConfirmSubmitBtn" class="btn btn-danger" disabled>Authorize & Execute</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Delete Report Confirmation Modal -->
+  <div id="adminDeleteConfirmModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Delete Disaster Report</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteConfirmModal')">✕</button>
+      </div>
+      <p id="adminDeleteConfirmMessage" style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        Are you sure you want to delete this report?
+      </p>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteConfirmModal')">Cancel</button>
+        <button type="button" id="adminConfirmDeleteBtn" class="btn btn-danger" onclick="executeDeleteIncident()">Confirm Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet Incident Location Picker Modal -->
+  <div id="locationPickerModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 650px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">📍 Select Incident Location</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('locationPickerModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 8px 0 12px 0; font-size: 0.88rem;">
+        Click anywhere on the map or drag the marker to specify exact incident coordinates.
+      </p>
+      <div id="locationPickerMap" style="height: 350px; width: 100%; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 12px; background: #e5e3df;"></div>
+      <div style="background: rgba(255,255,255,0.05); padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 16px; border: 1px solid var(--border-color);">
+        <strong>Captured Coordinates:</strong> <span id="pickerCoordsDisplay">13.0827, 80.2707</span><br>
+        <strong>Address:</strong> <span id="pickerAddressDisplay">Resolving address via OpenStreetMap...</span>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('locationPickerModal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmLocationPickerSelection()">Confirm Location</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Edit Incident Modal -->
+  <div id="adminEditIncidentModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 550px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">✏️ Admin Edit Incident</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminEditIncidentModal')">✕</button>
+      </div>
+      <form id="adminEditIncidentForm" onsubmit="submitAdminEditIncident(event)">
+        <input type="hidden" id="adminEditId">
+        
+        <div class="form-group" style="margin-top: 12px;">
+          <label>Incident Title *</label>
+          <input type="text" id="adminEditTitle" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="adminEditDescription" rows="3" class="form-control" required></textarea>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Severity Level *</label>
+            <select id="adminEditSeverity" class="form-control" required>
+              <option value="UNVERIFIED">⚪ UNVERIFIED</option>
+              <option value="LOW">🟢 LOW</option>
+              <option value="MEDIUM">🟡 MEDIUM</option>
+              <option value="HIGH">🟠 HIGH</option>
+              <option value="CRITICAL">🔴 CRITICAL</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Status *</label>
+            <select id="adminEditStatus" class="form-control" required>
+              <option value="PENDING_VERIFICATION">⏳ PENDING_VERIFICATION</option>
+              <option value="VERIFIED_ACTIVE">🛡️ VERIFIED_ACTIVE</option>
+              <option value="IN_PROGRESS">🟡 IN_PROGRESS</option>
+              <option value="RESOLVED">🟢 RESOLVED</option>
+              <option value="CLOSED">📁 CLOSED</option>
+              <option value="CANCELLED_BY_ADMIN">⚪ CANCELLED_BY_ADMIN</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Location Landmark / Address</label>
+          <input type="text" id="adminEditLocationName" class="form-control" required>
+        </div>
+
+        <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 12px; font-weight: 600;" onclick="openLocationPicker('adminEdit')">
+          📍 Map Location Picker
+        </button>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Latitude *</label>
+            <input type="number" step="any" id="adminEditLatitude" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>Longitude *</label>
+            <input type="number" step="any" id="adminEditLongitude" class="form-control" required>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('adminEditIncidentModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Edit Resource Modal -->
+  <div id="adminEditResourceModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 500px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">✏️ Edit Resource Supply Post</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminEditResourceModal')">✕</button>
+      </div>
+      <form id="adminEditResourceForm" onsubmit="submitAdminEditResource(event)">
+        <input type="hidden" id="adminEditResId">
+        
+        <div class="form-group" style="margin-top: 12px;">
+          <label>Resource Type *</label>
+          <select id="adminEditResType" class="form-control" required>
+            <option value="FOOD">🍞 Food & Ration</option>
+            <option value="WATER">💧 Clean Drinking Water</option>
+            <option value="MEDICAL">💊 Medical & First Aid Kits</option>
+            <option value="SHELTER">⛺ Tarpaulins & Tents</option>
+            <option value="RESCUE_EQUIPMENT">🛟 Boats & Rescue Gear</option>
+            <option value="TRANSPORT">🚚 Transport Vehicles</option>
+            <option value="CLOTHING">👕 Blankets & Warm Clothes</option>
+            <option value="OTHER">📦 Other Supplies</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Description *</label>
+          <textarea id="adminEditResDescription" rows="3" class="form-control" required></textarea>
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Quantity *</label>
+            <input type="number" id="adminEditResQuantity" class="form-control" min="1" required>
+          </div>
+          <div class="form-group">
+            <label>Status *</label>
+            <select id="adminEditResStatus" class="form-control" required>
+              <option value="AVAILABLE">🟢 AVAILABLE</option>
+              <option value="DISPATCHED">🚚 DISPATCHED</option>
+              <option value="EXHAUSTED">🔴 EXHAUSTED / EXPIRED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="margin: 0; font-weight: 600;">Available Until (Expiry)</label>
+            <label style="font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-dark, #334155); display: inline-flex; align-items: center; gap: 4px;">
+              <input type="checkbox" id="adminEditResNoExpiryToggle" onchange="toggleNoExpiry('adminEdit')"> No Expiry
+            </label>
+          </div>
+          <input type="datetime-local" id="adminEditResAvailableUntil" class="form-control">
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('adminEditResourceModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Resource Verification Modal (Type DELETE) -->
+  <div id="deleteResourceConfirmModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="card-header">
+        <h3 class="card-title">🗑️ Delete Resource Supply Post</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('deleteResourceConfirmModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 12px 0 16px 0; font-size: 0.9rem; line-height: 1.5;">
+        This action cannot be undone. Type <strong>DELETE</strong> in uppercase below to confirm:
+      </p>
+      <form onsubmit="handleDeleteResourceConfirmSubmit(event)">
+        <input type="hidden" id="deleteTargetResourceId">
+        <div class="form-group">
+          <input type="text" id="deleteResourceTextInput" class="form-control" placeholder="Type DELETE" required autocomplete="off" style="font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
+          <button type="button" class="btn btn-outline" onclick="closeModal('deleteResourceConfirmModal')">Cancel</button>
+          <button type="submit" id="deleteResourceSubmitBtn" class="btn btn-danger" disabled>Confirm Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Delete All Disasters Modal -->
+  <div id="adminDeleteAllIncidentsModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">🗑️ Delete All Disaster Reports</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllIncidentsModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL disaster incidents, reports, assignments, and discussions</strong> from the live system.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllIncidentsModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllIncidentsBtn" class="btn btn-danger" onclick="executeDeleteAllIncidents()">Yes, Delete All Disasters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Delete All Resources Modal -->
+  <div id="adminDeleteAllResourcesModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">📦 Delete All Emergency Resources</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllResourcesModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL emergency resource supply posts</strong> from the database.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllResourcesModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllResourcesBtn" class="btn btn-danger" onclick="executeDeleteAllResources()">Yes, Delete All Resources</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin System Reset Modal -->
+  <div id="adminResetSystemModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">⚠️ Master System Reset</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminResetSystemModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        This will wipe all test incidents, resources, volunteer assignments, and audit logs while preserving your Administrator account.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminResetSystemModal')">Cancel</button>
+        <button type="button" id="confirmResetSystemBtn" class="btn btn-danger" onclick="executeResetSystemData()">Confirm System Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase JS SDK (Version 2) for Realtime Subscriptions -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
