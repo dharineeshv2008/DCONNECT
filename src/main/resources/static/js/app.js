@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSupabaseRealtime();
   restoreSession();
 
-  // Requirement 8: Real-time 10s periodic polling fallback sync
+  // Requirement 8: Real-time 2s periodic polling fallback sync
   setInterval(() => {
     if (currentUser && currentUser.approved) {
       const activeTab = document.querySelector('.tab-content.active');
@@ -37,9 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
         loadDisasters();
       } else if (activeTab && activeTab.id === 'adminTab') {
         loadAdminReportsTable();
+      } else if (activeTab && activeTab.id === 'volunteerTab') {
+        loadVolunteersDirectory();
       }
     }
-  }, 10000);
+  }, 2000);
 });
 
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)

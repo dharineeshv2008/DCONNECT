@@ -168,11 +168,15 @@ module.exports = async (req, res) => {
         message: body.description || 'Emergency reported.'
       });
 
-      // Send Telegram alert to admin for approval if pending verification
-      sendAdminIncidentNotification({
-        ...newDisaster,
-        createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
-      }).catch(err => console.warn('Telegram notification warning:', err.message));
+      // Send Telegram alert to admin for approval if pending verification (ONLY IF NOT CREATED BY ADMIN)
+      const roleStr = (reporterUser ? reporterUser.role : (body.role || body.userRole || '')).toUpperCase();
+      const isAdminCreator = ['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(roleStr);
+      if (!isAdminCreator) {
+        sendAdminIncidentNotification({
+          ...newDisaster,
+          createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
+        }).catch(err => console.warn('Telegram notification warning:', err.message));
+      }
 
       return sendJson(res, 201, {
         success: true,

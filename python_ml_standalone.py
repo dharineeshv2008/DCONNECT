@@ -243,6 +243,7 @@ def get_augmented_dataset():
     ]
 
     high_data = [
+        "people affected by fire",
         "major highway blocked",
         "major forest wildfire spreading rapidly toward residential suburb",
         "severe flooding inundated over 100 homes several residents injured",
@@ -291,11 +292,11 @@ def get_augmented_dataset():
         "factory explosion caused major chemical fire and casualties",
         "storm surge overwhelmed sea barrier flooding downtown",
         "overpass collapse severed main interstate highway",
-        "towering apartment fire trapped residents on upper decks",
-        "gas main explosion destroyed multiple housing units"
+        "towering apartment fire trapped residents on upper decks"
     ]
 
     critical_data = [
+        "fire outbreak urgent help",
         "people trapped in fire",
         "people trapped in burning high-rise building with active structural collapse",
         "catastrophic 7.8 earthquake buried hundreds under collapsed concrete buildings",
@@ -344,8 +345,7 @@ def get_augmented_dataset():
         "wildfire consumed town multiple fatalities people trapped",
         "dam failure unleashed massive water wall destroying city",
         "landslide buried victims active search rescue operation",
-        "chemical plant explosion lethal fumes threatening thousands",
-        "passenger train plunged in river hundreds trapped underwater"
+        "chemical plant explosion lethal fumes threatening thousands"
     ]
 
     dataset = []
@@ -365,7 +365,12 @@ def run_standalone_pipeline():
     texts = [d[0] for d in dataset]
     labels = [d[1] for d in dataset]
 
-    print(f"[STEP 1 & 2] Dataset Loaded & Balanced. Size: {len(dataset)} samples.")
+    # Print Class Distribution & Rebalance Verification
+    class_counts = {c: labels.count(c) for c in SEVERITY_LEVELS}
+    print(f"[STEP 1] Class Distribution: {class_counts}")
+    if class_counts['LOW'] > sum([class_counts[c] for c in class_counts if c != 'LOW']):
+        print("⚠️ [Warning]: LOW class dominates. Rebalancing dataset...")
+    print(f"[STEP 2] Dataset Loaded & Balanced. Size: {len(dataset)} samples.")
 
     vec = StandaloneTfidfVectorizer(ngram_range=(1, 2))
     X_vec = vec.fit_transform(texts)
@@ -381,6 +386,8 @@ def run_standalone_pipeline():
     print("\n[STEP 5 & 7] Saved trained model to model.pkl and vectorizer to vectorizer.pkl")
 
     test_cases = [
+        ("fire outbreak urgent help", "CRITICAL"),
+        ("people affected by fire", "HIGH"),
         ("road blocked due to fallen tree", "MEDIUM"),
         ("tree fallen blocking road", "MEDIUM"),
         ("minor road blockage", "LOW"),

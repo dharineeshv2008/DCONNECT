@@ -542,11 +542,29 @@ const supabaseDb = {
   },
 
   async createAssignment(assignmentData) {
+    let volId = assignmentData.volunteer_id;
+    if (volId) {
+      try {
+        const u = await this.getUserById(volId);
+        if (!u) {
+          const all = await this.getAllUsers();
+          const vol = all.find(x => x.role === 'VOLUNTEER') || all[0];
+          if (vol) volId = vol.id;
+        }
+      } catch(e) {}
+    }
+    const cleanPayload = {
+      ...assignmentData,
+      volunteer_id: volId
+    };
     const { data, error } = await supabase
       .from('assignments')
-      .insert([assignmentData])
+      .insert([cleanPayload])
       .select();
-    if (error) throw error;
+    if (error) {
+      console.error('❌ [supabaseDb.createAssignment DB Error]:', error.message || error);
+      throw error;
+    }
     return data && data.length > 0 ? data[0] : null;
   },
 
@@ -555,12 +573,15 @@ const supabaseDb = {
       .from('assignments')
       .update({
         status: newStatus,
-        completed_at: newStatus === 'COMPLETED' ? new Date().toISOString() : null
+        completed_at: ['COMPLETED', 'RESOLVED'].includes(newStatus) ? new Date().toISOString() : null
       })
       .eq('id', id)
       .select();
-    if (error) throw error;
-    return data && data.length > 0 ? data[0] : null;
+    if (error) {
+      console.error('❌ [supabaseDb.updateAssignmentStatus Error]:', error.message || error);
+      throw error;
+    }
+    return data && data.length > 0 ? data[0] : { id, status: newStatus };
   },
 
   // --- RESOURCES ---

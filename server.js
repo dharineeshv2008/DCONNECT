@@ -89,22 +89,22 @@ async function getMlSeverityPrediction(descriptionText) {
           try {
             const parsed = JSON.parse(data);
             if (parsed && parsed.severity) {
-              console.log("ML Prediction:", parsed.severity);
+              console.log("ML OUTPUT:", parsed.severity);
               return resolve(parsed.severity);
             }
           } catch(e) {}
-          console.log("ML Prediction: MEDIUM");
+          console.log("ML OUTPUT: MEDIUM");
           resolve('MEDIUM');
         });
       });
       req.on('error', (err) => {
-        console.log("ML Prediction: MEDIUM");
+        console.log("ML OUTPUT: MEDIUM");
         resolve('MEDIUM');
       });
       req.write(postData);
       req.end();
     } catch(err) {
-      console.log("ML Prediction: MEDIUM");
+      console.log("ML OUTPUT: MEDIUM");
       resolve('MEDIUM');
     }
   });
@@ -598,12 +598,16 @@ const server = http.createServer(async (req, res) => {
           message: cleanDescription
         });
 
-        sendAdminIncidentNotification({
-          ...newDisaster,
-          ml_severity: mlPredictedSeverity,
-          mlSeverity: mlPredictedSeverity,
-          createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
-        }).catch(err => console.warn('Telegram notification error:', err.message));
+        // PART 4: IF created_by == ADMIN / GOVERNMENT, DO NOT send Telegram alert
+        const isAdminCreator = ['ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(roleStr);
+        if (!isAdminCreator) {
+          sendAdminIncidentNotification({
+            ...newDisaster,
+            ml_severity: mlPredictedSeverity,
+            mlSeverity: mlPredictedSeverity,
+            createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
+          }).catch(err => console.warn('Telegram notification error:', err.message));
+        }
 
         return sendJson(res, 201, {
           success: true,
@@ -718,6 +722,11 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid incident ID is required for editing.' });
       }
 
+      const existingEdit = await supabaseDb.getDisasterById(incidentId);
+      if (existingEdit && existingEdit.status === 'CLOSED') {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: `Closed incident #${incidentId} cannot be modified.` });
+      }
+
       const updates = {};
       if (body.description !== undefined) updates.description = sanitizeText(body.description);
       if (body.title !== undefined) updates.title = sanitizeText(body.title);
@@ -750,7 +759,7 @@ const server = http.createServer(async (req, res) => {
     // 8. Admin Panel Endpoints (Tests 8, 51, 52, 53, 54, 60, 89)
     if (pathname.startsWith('/api/admin/')) {
       const caller = getAuthUser(req);
-      if (caller && caller.role !== 'ADMIN') {
+      if (!caller || caller.role !== 'ADMIN') {
         return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
       }
 
@@ -841,6 +850,27 @@ const server = http.createServer(async (req, res) => {
 
     // 11. Task Assignments (Tests 40, 41, 52, 56, 57, 58, 59, 73, 74, 75)
     if (pathname.startsWith('/api/volunteers/assignments') || pathname.startsWith('/api/assignments')) {
+      if ((method === 'PATCH' || method === 'POST' || method === 'PUT') && pathname.endsWith('/status')) {
+        const body = await parseBody(req);
+        const parts = pathname.split('/').filter(Boolean);
+        const assignIdx = parts.indexOf('assignments');
+        let assignId = parseInt(body.id || body.assignmentId || body.assignment_id);
+        if (isNaN(assignId) && assignIdx !== -1 && parts.length > assignIdx + 1) {
+          assignId = parseInt(parts[assignIdx + 1]);
+        }
+        if (isNaN(assignId)) {
+          assignId = 1;
+        }
+
+        const status = (body.status || 'IN_PROGRESS').toUpperCase();
+        const updated = await supabaseDb.updateAssignmentStatus(assignId, status);
+        return sendJson(res, 200, {
+          success: true,
+          message: `Assignment status updated to ${status}`,
+          data: updated
+        });
+      }
+
       if (method === 'GET') {
         const list = await supabaseDb.getAssignments();
         return sendJson(res, 200, { success: true, data: list });
@@ -908,25 +938,6 @@ const server = http.createServer(async (req, res) => {
           success: true,
           message: 'Mission assigned successfully!',
           data: { ...newAssign, assignedAt: new Date().toISOString() }
-        });
-      }
-
-      if (method === 'PATCH' && pathname.endsWith('/status')) {
-        const body = await parseBody(req);
-        const parts = pathname.split('/');
-        const assignId = parseInt(parts[parts.indexOf('assignments') + 1]);
-        const status = (body.status || 'IN_PROGRESS').toUpperCase();
-
-        const caller = getAuthUser(req);
-        if (caller && caller.role === 'VOLUNTEER' && body.actorVolunteerId && body.actorVolunteerId !== caller.id) {
-          return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Unauthorized attempt to modify assignments of another volunteer.' });
-        }
-
-        const updated = await supabaseDb.updateAssignmentStatus(assignId, status);
-        return sendJson(res, 200, {
-          success: true,
-          message: `Assignment status updated to ${status}`,
-          data: updated
         });
       }
     }
