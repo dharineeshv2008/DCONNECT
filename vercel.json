@@ -10,7 +10,7 @@
       "destination": "/index.html"
     },
     {
-      "source": "/((?!assets/|css/|js/|favicon|background).*)",
+      "source": "/((?!api/|assets/|css/|js/|favicon|background).*)",
       "destination": "/index.html"
     }
   ],
