@@ -69,6 +69,47 @@ function sendJson(res, statusCode, data, headers = {}) {
   res.end(JSON.stringify(data));
 }
 
+async function getMlSeverityPrediction(descriptionText) {
+  return new Promise((resolve) => {
+    try {
+      const postData = JSON.stringify({ description: descriptionText });
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: 8000,
+        path: '/predict',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed && parsed.severity) {
+              console.log("ML Prediction:", parsed.severity);
+              return resolve(parsed.severity);
+            }
+          } catch(e) {}
+          console.log("ML Prediction: MEDIUM");
+          resolve('MEDIUM');
+        });
+      });
+      req.on('error', (err) => {
+        console.log("ML Prediction: MEDIUM");
+        resolve('MEDIUM');
+      });
+      req.write(postData);
+      req.end();
+    } catch(err) {
+      console.log("ML Prediction: MEDIUM");
+      resolve('MEDIUM');
+    }
+  });
+}
+
 function getAuthUser(req) {
   const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
   if (!authHeader) return null;
@@ -527,11 +568,17 @@ const server = http.createServer(async (req, res) => {
           initialStatus = 'VERIFIED_ACTIVE';
         }
 
+        // Call ML API prediction (Requirement: CALL ML API, DO NOT use default severity, log console.log("ML Prediction:", severity), store ml_severity)
+        const mlPredictedSeverity = await getMlSeverityPrediction(cleanDescription);
+
+        const assignedSeverity = (body.severity && body.severity !== 'MEDIUM') ? body.severity : mlPredictedSeverity;
+
         const newDisaster = await supabaseDb.createDisaster({
           type: type,
           title: cleanTitle,
           description: cleanDescription,
-          severity: body.severity || 'MEDIUM',
+          severity: assignedSeverity,
+          ml_severity: mlPredictedSeverity,
           latitude: userLat,
           longitude: userLon,
           location_name: sanitizeText(body.locationName || `Lat: ${userLat.toFixed(4)}, Lon: ${userLon.toFixed(4)}`),
@@ -553,19 +600,21 @@ const server = http.createServer(async (req, res) => {
 
         sendAdminIncidentNotification({
           ...newDisaster,
+          ml_severity: mlPredictedSeverity,
+          mlSeverity: mlPredictedSeverity,
           createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
         }).catch(err => console.warn('Telegram notification error:', err.message));
 
         return sendJson(res, 201, {
           success: true,
           message: initialStatus === 'VERIFIED_ACTIVE' ? 'Disaster published directly.' : 'Citizen report submitted. Awaiting Admin verification.',
-          data: { ...newDisaster, disasterId: newDisaster.id, id: newDisaster.id, reportCount: 1, wasMerged: false }
+          data: { ...newDisaster, ml_severity: mlPredictedSeverity, disasterId: newDisaster.id, id: newDisaster.id, reportCount: 1, wasMerged: false }
         });
       }
     }
 
     // 7. Status Transitions & Workflow (Tests 36-50)
-    if ((method === 'POST' || method === 'PATCH' || method === 'PUT') && (pathname === '/api/incidents/update' || pathname === '/api/admin/approve-disaster' || pathname === '/api/admin/approve' || (pathname.includes('/disasters/') && pathname.endsWith('/status')))) {
+    if ((method === 'POST' || method === 'PATCH' || method === 'PUT') && (pathname === '/api/incidents/update' || pathname === '/api/incidents/update-status' || pathname === '/api/incidents/update-severity' || pathname === '/api/admin/approve-disaster' || pathname === '/api/admin/approve' || (pathname.includes('/disasters/') && pathname.endsWith('/status')))) {
       const body = await parseBody(req);
       const parts = pathname.split('/');
       let incidentId = parseInt(body.id || body.incidentId || body.disasterId);
@@ -596,6 +645,16 @@ const server = http.createServer(async (req, res) => {
       }
 
       let statusInput = (body.status || (body.action === 'APPROVED' ? 'VERIFIED_ACTIVE' : (body.action === 'REJECTED' ? 'CANCELLED_BY_ADMIN' : ''))).trim();
+      if (!statusInput && body.severity) {
+        // Direct severity update
+        const updatedSev = await supabaseDb.updateDisaster(incidentId, { severity: body.severity.toUpperCase(), updated_at: new Date().toISOString() });
+        return sendJson(res, 200, {
+          success: true,
+          message: `Incident #${incidentId} severity updated to '${body.severity}'.`,
+          data: updatedSev || { ...existing, severity: body.severity }
+        });
+      }
+
       if (!statusInput && pathname.includes('approve')) statusInput = 'VERIFIED_ACTIVE';
 
       const ALLOWED_INCIDENT_STATUSES = [

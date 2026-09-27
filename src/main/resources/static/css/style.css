@@ -1381,6 +1381,25 @@ input:-webkit-autofill:active {
   border-radius: 8px;
 }
 
+/* Scrollable Fixed Height Containers & Pagination Controls */
+.fixed-scroll-container {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.custom-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border-radius: 0 0 8px 8px;
+}
+
 @media (max-width: 768px) {
   #locationPickerMap {
     height: 260px !important;

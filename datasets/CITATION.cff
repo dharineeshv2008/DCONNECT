@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this dataset, cite both HUMAID-NER and the original HumAID dataset."
+title: "HUMAID-NER research release"
+type: dataset
+version: 1.0.0
+date-released: 2026-09-24
+authors:
+  - family-names: Ali
+    given-names: Aijaz
+  - family-names: Basir
+    given-names: Nazish
+  - family-names: Nawaz
+    given-names: Sarfaraz
+  - family-names: Arain
+    given-names: Danish Nazir
+  - family-names: Ali
+    given-names: Haris
+url: "https://arxiv.org/abs/2609.16964"
+identifiers:
+  - type: doi
+    value: "10.62019/zabvxd97"
+    description: "Journal article DOI"
+  - type: doi
+    value: "10.48550/arXiv.2609.16964"
+    description: "arXiv DOI"

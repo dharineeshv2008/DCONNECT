@@ -1,0 +1,69 @@
+{
+  "dataset": "HUMAID-NER",
+  "release_version": "1.0.0",
+  "primary_format": "Apache Parquet",
+  "offset_convention": "Zero-based Unicode code-point offsets; end_char is exclusive.",
+  "record_fields": [
+    {
+      "name": "record_id",
+      "type": "string",
+      "required": true,
+      "description": "Stable ID derived from the SHA-256 hash of the exact text."
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "required": true,
+      "description": "English disaster-related tweet text as supplied in the source files."
+    },
+    {
+      "name": "humanitarian_category",
+      "type": "string",
+      "required": true,
+      "description": "Document-level HumAID humanitarian category slug."
+    },
+    {
+      "name": "entities",
+      "type": "list<struct>",
+      "required": true,
+      "description": "Character-offset entity annotations across ten operational entity types."
+    },
+    {
+      "name": "entity_count",
+      "type": "int16",
+      "required": true,
+      "description": "Number of entities in the record."
+    }
+  ],
+  "entity_fields": [
+    {
+      "name": "start_char",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "end_char",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "text",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "entity_type",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "annotation_source",
+      "type": "string",
+      "required": true,
+      "allowed_values": [
+        "spacy",
+        "regex"
+      ]
+    }
+  ]
+}

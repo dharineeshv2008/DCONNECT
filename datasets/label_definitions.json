@@ -1,0 +1,119 @@
+{
+  "humanitarian_categories": [
+    {
+      "slug": "caution_and_advice",
+      "display_name": "Caution And Advice"
+    },
+    {
+      "slug": "displaced_people_and_evacuations",
+      "display_name": "Displaced People And Evacuations"
+    },
+    {
+      "slug": "infrastructure_and_utility_damage",
+      "display_name": "Infrastructure And Utility Damage"
+    },
+    {
+      "slug": "injured_or_dead_people",
+      "display_name": "Injured Or Dead People"
+    },
+    {
+      "slug": "missing_or_found_people",
+      "display_name": "Missing Or Found People"
+    },
+    {
+      "slug": "not_humanitarian",
+      "display_name": "Not Humanitarian"
+    },
+    {
+      "slug": "other_relevant_information",
+      "display_name": "Other Relevant Information"
+    },
+    {
+      "slug": "requests_or_urgent_needs",
+      "display_name": "Requests Or Urgent Needs"
+    },
+    {
+      "slug": "rescue_volunteering_or_donation_effort",
+      "display_name": "Rescue Volunteering Or Donation Effort"
+    },
+    {
+      "slug": "sympathy_and_support",
+      "display_name": "Sympathy And Support"
+    }
+  ],
+  "entity_types": [
+    {
+      "code": "LOCATION",
+      "display_name": "Location",
+      "description": "Geographic reference."
+    },
+    {
+      "code": "DISASTER_TYPE",
+      "display_name": "Disaster type",
+      "description": "Named hazard or disaster event type."
+    },
+    {
+      "code": "CASUALTY",
+      "display_name": "Casualty",
+      "description": "Injury or fatality expression."
+    },
+    {
+      "code": "DISPLACED",
+      "display_name": "Displaced",
+      "description": "Evacuation or displacement expression."
+    },
+    {
+      "code": "REQUEST",
+      "display_name": "Request",
+      "description": "Expression of an aid need or request."
+    },
+    {
+      "code": "RESOURCE",
+      "display_name": "Resource",
+      "description": "Aid supply or other humanitarian resource."
+    },
+    {
+      "code": "RESCUE",
+      "display_name": "Rescue",
+      "description": "Active emergency or rescue operation."
+    },
+    {
+      "code": "ORGANIZATION",
+      "display_name": "Organization",
+      "description": "Named organization."
+    },
+    {
+      "code": "PERSON",
+      "display_name": "Person",
+      "description": "Named person."
+    },
+    {
+      "code": "NUMBER",
+      "display_name": "Number",
+      "description": "Standalone numerical expression."
+    }
+  ],
+  "legacy_bio_label2id": {
+    "O": 0,
+    "B-LOCATION": 1,
+    "I-LOCATION": 2,
+    "B-DISASTER_TYPE": 3,
+    "I-DISASTER_TYPE": 4,
+    "B-CASUALTY": 5,
+    "I-CASUALTY": 6,
+    "B-DISPLACED": 7,
+    "I-DISPLACED": 8,
+    "B-REQUEST": 9,
+    "I-REQUEST": 10,
+    "B-RESOURCE": 11,
+    "I-RESOURCE": 12,
+    "B-RESCUE": 13,
+    "I-RESCUE": 14,
+    "B-ORGANIZATION": 15,
+    "I-ORGANIZATION": 16,
+    "B-PERSON": 17,
+    "I-PERSON": 18,
+    "B-NUMBER": 19,
+    "I-NUMBER": 20
+  }
+}

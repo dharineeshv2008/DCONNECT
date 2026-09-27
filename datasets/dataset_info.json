@@ -1,0 +1,25 @@
+{
+  "dataset_name": "HUMAID-NER",
+  "version": "1.0.0",
+  "language": "en",
+  "license": "CC-BY-NC-SA-4.0",
+  "tasks": [
+    "named_entity_recognition",
+    "humanitarian_text_classification"
+  ],
+  "formats": [
+    "Apache Parquet",
+    "CSV"
+  ],
+  "split_rows": {
+    "train": 53531,
+    "validation": 7788,
+    "test": 15159
+  },
+  "total_records": 76478,
+  "total_entities": 245180,
+  "offset_convention": "Zero-based Unicode code-point offsets; end_char is exclusive.",
+  "paper": "https://arxiv.org/abs/2609.16964",
+  "doi": "10.62019/zabvxd97"
+}
+

@@ -166,16 +166,15 @@ async function sendAdminIncidentNotification(disaster) {
   const reporter = disaster.createdByName || disaster.reporterName || 'Citizen Reporter';
   const role = disaster.createdByRole || disaster.reporterRole || 'USER / VOLUNTEER';
 
-  const text = 
-`🚨 <b>NEW DISASTER REQUEST / INCIDENT REPORTED</b> 🚨
+  const mlSeverityVal = disaster.ml_severity || disaster.mlSeverity || disaster.severity || 'MEDIUM';
 
-<b>ID:</b> <code>#${disaster.id}</code>
-<b>Type:</b> <code>${disaster.type || 'FLOOD'}</code>
-<b>Title:</b> ${escapeHtml(title)}
-<b>Description:</b> ${escapeHtml(desc)}
-<b>Location:</b> ${escapeHtml(location)} (<code>${disaster.latitude}, ${disaster.longitude}</code>)
-<b>Reported By:</b> ${escapeHtml(reporter)} (${escapeHtml(role)})
-<b>Current Status:</b> <code>${disaster.status || 'PENDING'}</code>`;
+  const text = 
+`New Disaster Report 🚨
+Description: ${escapeHtml(desc)}
+ML Severity: ${escapeHtml(mlSeverityVal)}
+Location: ${escapeHtml(location)}
+
+Approve / Reject`;
 
   const payload = {
     chat_id: adminChatId,

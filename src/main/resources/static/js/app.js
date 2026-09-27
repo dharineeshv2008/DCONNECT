@@ -961,6 +961,9 @@ async function updateMissionStatus(assignmentId, newStatus) {
   }
 }
 
+let volunteersListCache = [];
+let volunteerListPage = 1;
+
 async function loadVolunteersDirectory() {
   const container = document.getElementById('volunteersDirectoryList');
   if (!container) return;
@@ -972,29 +975,64 @@ async function loadVolunteersDirectory() {
     } catch (e) {
       data = await fetchAPI(`/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
     }
-    const list = data.data || [];
-    if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No registered volunteers found in directory.</p>`;
-      return;
-    }
-
-    container.innerHTML = list.map(v => `
-      <div style="border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <strong>🧑‍🚒 ${escapeHtml(v.name || 'Volunteer')}</strong>
-          <span class="badge badge-status-active" style="margin-left: 6px;">VOLUNTEER</span>
-          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
-            🛠️ Skills: ${escapeHtml(v.skills || 'General Relief')} | 📞 ${escapeHtml(v.phone || 'N/A')}
-          </div>
-        </div>
-        <div>
-          <span class="badge badge-${(v.availabilityStatus || 'AVAILABLE').toLowerCase() === 'available' ? 'low' : 'medium'}">${v.availabilityStatus || 'AVAILABLE'}</span>
-        </div>
-      </div>
-    `).join('');
+    volunteersListCache = data.data || [];
+    renderVolunteersDirectory();
   } catch (err) {
     handleApiError(err);
   }
+}
+
+function renderVolunteersDirectory() {
+  const container = document.getElementById('volunteersDirectoryList');
+  if (!container) return;
+
+  if (volunteersListCache.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No registered volunteers found in directory.</p>`;
+    return;
+  }
+
+  const listPageSize = 10;
+  const total = volunteersListCache.length;
+  const totalPages = Math.ceil(total / listPageSize) || 1;
+  if (volunteerListPage > totalPages) volunteerListPage = totalPages;
+  if (volunteerListPage < 1) volunteerListPage = 1;
+
+  const startIdx = (volunteerListPage - 1) * listPageSize;
+  const pageItems = volunteersListCache.slice(startIdx, startIdx + listPageSize);
+
+  const itemsHtml = pageItems.map(v => `
+    <div style="border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <strong>🧑‍🚒 ${escapeHtml(v.name || 'Volunteer')}</strong>
+        <span class="badge badge-status-active" style="margin-left: 6px;">VOLUNTEER</span>
+        <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+          🛠️ Skills: ${escapeHtml(v.skills || 'General Relief')} | 📞 ${escapeHtml(v.phone || 'N/A')}
+        </div>
+      </div>
+      <div>
+        <span class="badge badge-${(v.availabilityStatus || 'AVAILABLE').toLowerCase() === 'available' ? 'low' : 'medium'}">${v.availabilityStatus || 'AVAILABLE'}</span>
+      </div>
+    </div>
+  `).join('');
+
+  container.innerHTML = `
+    <div class="fixed-scroll-container">
+      ${itemsHtml}
+    </div>
+    <div class="custom-pagination-bar">
+      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} volunteers</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="changeVolunteerPage(-1)" ${volunteerListPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
+        <span style="font-weight: 700;">Page ${volunteerListPage} of ${totalPages}</span>
+        <button class="btn btn-outline btn-sm" onclick="changeVolunteerPage(1)" ${volunteerListPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function changeVolunteerPage(delta) {
+  volunteerListPage += delta;
+  renderVolunteersDirectory();
 }
 
 async function openAssignTaskModal(disasterId) {
@@ -1078,54 +1116,92 @@ function toggleNoExpiry(context = 'resource') {
 // 9. RESOURCE MANAGEMENT
 // ==============================================================================
 
+let resourcesListCache = [];
+let resourcePoolPage = 1;
+
 async function loadResources() {
   const container = document.getElementById('resourcePoolList');
   if (!container) return;
 
   try {
     const data = await fetchAPI('/resources/list');
-    const list = data.data || [];
-    if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
-      return;
-    }
-
-    container.innerHTML = list.map(r => {
-      const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
-      const isDispatched = r.status === 'DISPATCHED';
-      const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
-      const expiryRaw = r.expiryDate || r.availableUntil || r.expiry_date;
-      const formattedExpiry = expiryRaw ? new Date(expiryRaw).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
-      const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
-      const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
-      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-      const addressText = escapeHtml(r.address || 'Central Relief Pool');
-
-      return `
-        <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <strong>[${r.resourceType}] ${escapeHtml(r.description || r.resourceName)}</strong>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <span class="badge ${badgeClass}">${r.status}</span>
-              <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
-            </div>
-          </div>
-          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
-            📍 Pickup Location: <strong>${addressText}</strong><br>
-            Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
-            ⏳ Available Until: <strong>${formattedExpiry}</strong>
-          </div>
-          <div style="margin-top: 8px;">
-            <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; padding: 4px 10px; text-decoration: none;">
-              🗺️ View on Google Maps
-            </a>
-          </div>
-        </div>
-      `;
-    }).join('');
+    resourcesListCache = data.data || [];
+    renderResourcesPool();
   } catch (err) {
     handleApiError(err);
   }
+}
+
+function renderResourcesPool() {
+  const container = document.getElementById('resourcePoolList');
+  if (!container) return;
+
+  if (resourcesListCache.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
+    return;
+  }
+
+  const listPageSize = 10;
+  const total = resourcesListCache.length;
+  const totalPages = Math.ceil(total / listPageSize) || 1;
+  if (resourcePoolPage > totalPages) resourcePoolPage = totalPages;
+  if (resourcePoolPage < 1) resourcePoolPage = 1;
+
+  const startIdx = (resourcePoolPage - 1) * listPageSize;
+  const pageItems = resourcesListCache.slice(startIdx, startIdx + listPageSize);
+
+  const itemsHtml = pageItems.map(r => {
+    const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
+    const isDispatched = r.status === 'DISPATCHED';
+    const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
+    const expiryRaw = r.expiryDate || r.availableUntil || r.expiry_date;
+    const formattedExpiry = expiryRaw ? new Date(expiryRaw).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
+    const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
+    const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const addressText = escapeHtml(r.address || 'Central Relief Pool');
+
+    return `
+      <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <strong>[${r.resourceType}] ${escapeHtml(r.description || r.resourceName)}</strong>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <span class="badge ${badgeClass}">${r.status}</span>
+            <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
+          </div>
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
+          📍 Pickup Location: <strong>${addressText}</strong><br>
+          Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
+          ⏳ Available Until: <strong>${formattedExpiry}</strong>
+        </div>
+        <div style="margin-top: 8px;">
+          <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; padding: 4px 10px; text-decoration: none;">
+            🗺️ View on Google Maps
+          </a>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="fixed-scroll-container">
+      ${itemsHtml}
+    </div>
+    <div class="custom-pagination-bar">
+      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} resources</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="changeResourcePage(-1)" ${resourcePoolPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
+        <span style="font-weight: 700;">Page ${resourcePoolPage} of ${totalPages}</span>
+        <button class="btn btn-outline btn-sm" onclick="changeResourcePage(1)" ${resourcePoolPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function changeResourcePage(delta) {
+  resourcePoolPage += delta;
+  renderResourcesPool();
 }
 
 async function handleResourceSubmit(e) {
@@ -1572,6 +1648,8 @@ function renderAdminReportsTable() {
     const isPending = (d.status === 'PENDING_VERIFICATION' || d.status === 'PENDING');
     const isCancelled = (d.status === 'CANCELLED_BY_ADMIN' || d.status === 'CANCELLED');
     const severityVal = (d.severity || 'UNVERIFIED').toUpperCase();
+    const mlSeverityVal = (d.ml_severity || d.mlSeverity || d.severity || 'MEDIUM').toUpperCase();
+
     return `
       <tr>
         <td><strong>#${d.id}</strong></td>
@@ -1590,8 +1668,10 @@ function renderAdminReportsTable() {
           </select>
         </td>
         <td>
+          <span class="badge badge-${mlSeverityVal.toLowerCase()}" style="font-weight: 700;">🤖 ${mlSeverityVal}</span>
+        </td>
+        <td>
           <select class="admin-select-status" onchange="updateAdminInlineSeverity(${d.id}, this.value)">
-            <option value="UNVERIFIED" ${severityVal === 'UNVERIFIED' ? 'selected' : ''}>⚪ UNVERIFIED</option>
             <option value="LOW" ${severityVal === 'LOW' ? 'selected' : ''}>🟢 LOW</option>
             <option value="MEDIUM" ${severityVal === 'MEDIUM' ? 'selected' : ''}>🟡 MEDIUM</option>
             <option value="HIGH" ${severityVal === 'HIGH' ? 'selected' : ''}>🟠 HIGH</option>
@@ -1643,12 +1723,12 @@ async function updateAdminInlineStatus(incidentId, newStatus) {
 
 async function updateAdminInlineSeverity(incidentId, newSeverity) {
   try {
-    await fetchAPI('/incidents/edit', {
+    await fetchAPI('/incidents/update-severity', {
       method: 'POST',
       body: { id: incidentId, severity: newSeverity }
     });
 
-    showToast('Severity Updated', `Report #${incidentId} severity set to '${newSeverity}'`, 'success');
+    showToast('Severity Overridden', `Report #${incidentId} severity set to '${newSeverity}'`, 'success');
 
     const item = adminReportsList.find(d => d.id === incidentId);
     if (item) item.severity = newSeverity;
@@ -1898,36 +1978,74 @@ async function executeDeleteIncident() {
   }
 }
 
+let pendingUsersListCache = [];
+let pendingUsersPage = 1;
+
 async function loadAdminPendingUsers() {
   const container = document.getElementById('adminPendingUsersList');
   if (!container) return;
 
   try {
     const data = await fetchAPI('/admin/pending-users');
-    const list = data.data || [];
-    if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No organizations pending approval.</p>`;
-      return;
-    }
-
-    container.innerHTML = list.map(u => `
-      <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong>🏢 ${escapeHtml(u.organizationName || u.name)}</strong>
-          <span class="badge badge-ngo">${u.role}</span>
-        </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
-          Contact: <strong>${escapeHtml(u.name)}</strong> (${escapeHtml(u.phone)}) | Reg No: ${escapeHtml(u.organizationRegNo || 'N/A')}
-        </div>
-        <div style="margin-top: 8px; display: flex; gap: 8px;">
-          <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED')">✓ Approve Account</button>
-          <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED')">✕ Reject</button>
-        </div>
-      </div>
-    `).join('');
+    pendingUsersListCache = data.data || [];
+    renderAdminPendingUsers();
   } catch (err) {
     handleApiError(err);
   }
+}
+
+function renderAdminPendingUsers() {
+  const container = document.getElementById('adminPendingUsersList');
+  if (!container) return;
+
+  if (pendingUsersListCache.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No organizations pending approval.</p>`;
+    return;
+  }
+
+  const listPageSize = 10;
+  const total = pendingUsersListCache.length;
+  const totalPages = Math.ceil(total / listPageSize) || 1;
+  if (pendingUsersPage > totalPages) pendingUsersPage = totalPages;
+  if (pendingUsersPage < 1) pendingUsersPage = 1;
+
+  const startIdx = (pendingUsersPage - 1) * listPageSize;
+  const pageItems = pendingUsersListCache.slice(startIdx, startIdx + listPageSize);
+
+  const itemsHtml = pageItems.map(u => `
+    <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <strong>🏢 ${escapeHtml(u.organizationName || u.name)}</strong>
+        <span class="badge badge-ngo">${u.role}</span>
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
+        Contact: <strong>${escapeHtml(u.name)}</strong> (${escapeHtml(u.phone)}) | Reg No: ${escapeHtml(u.organizationRegNo || 'N/A')}
+      </div>
+      <div style="margin-top: 8px; display: flex; gap: 8px;">
+        <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED')">✓ Approve Account</button>
+        <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED')">✕ Reject</button>
+      </div>
+    </div>
+  `).join('');
+
+  container.innerHTML = `
+    <div class="fixed-scroll-container" style="max-height: 320px;">
+      ${itemsHtml}
+    </div>
+    <div class="custom-pagination-bar">
+      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} pending</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="changePendingUsersPage(-1)" ${pendingUsersPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
+        <span style="font-weight: 700;">Page ${pendingUsersPage} of ${totalPages}</span>
+        <button class="btn btn-outline btn-sm" onclick="changePendingUsersPage(1)" ${pendingUsersPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function changePendingUsersPage(delta) {
+  pendingUsersPage += delta;
+  renderAdminPendingUsers();
 }
 
 async function adminApproveUser(userId, action) {
@@ -1949,23 +2067,50 @@ async function adminApproveUser(userId, action) {
   }
 }
 
+let pendingDisastersListCache = [];
+let pendingDisastersPage = 1;
+
 async function loadAdminPendingDisasters() {
   const container = document.getElementById('adminPendingDisastersList');
   if (!container) return;
 
   try {
     const data = await fetchAPI('/admin/pending-disasters');
-    const list = data.data || [];
-    if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>`;
-      return;
-    }
+    pendingDisastersListCache = data.data || [];
+    renderAdminPendingDisasters();
+  } catch (err) {
+    handleApiError(err);
+  }
+}
 
-    container.innerHTML = list.map(d => `
+function renderAdminPendingDisasters() {
+  const container = document.getElementById('adminPendingDisastersList');
+  if (!container) return;
+
+  if (pendingDisastersListCache.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>`;
+    return;
+  }
+
+  const listPageSize = 10;
+  const total = pendingDisastersListCache.length;
+  const totalPages = Math.ceil(total / listPageSize) || 1;
+  if (pendingDisastersPage > totalPages) pendingDisastersPage = totalPages;
+  if (pendingDisastersPage < 1) pendingDisastersPage = 1;
+
+  const startIdx = (pendingDisastersPage - 1) * listPageSize;
+  const pageItems = pendingDisastersListCache.slice(startIdx, startIdx + listPageSize);
+
+  const itemsHtml = pageItems.map(d => {
+    const mlSev = (d.ml_severity || d.mlSeverity || d.severity || 'MEDIUM').toUpperCase();
+    return `
       <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <strong>🚨 [${d.type}] ${escapeHtml(d.title)}</strong>
-          <span class="badge badge-${d.severity.toLowerCase()}">${d.severity}</span>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <span class="badge badge-${mlSev.toLowerCase()}">🤖 ${mlSev}</span>
+            <span class="badge badge-${d.severity.toLowerCase()}">${d.severity}</span>
+          </div>
         </div>
         <p style="font-size: 0.85rem; margin: 4px 0;">${escapeHtml(d.description)}</p>
         <div style="font-size: 0.8rem; color: var(--text-muted);">
@@ -1976,10 +2121,27 @@ async function loadAdminPendingDisasters() {
           <button class="btn btn-outline btn-sm" onclick="adminApproveDisaster(${d.id}, 'REJECTED')">✕ Close</button>
         </div>
       </div>
-    `).join('');
-  } catch (err) {
-    handleApiError(err);
-  }
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="fixed-scroll-container" style="max-height: 320px;">
+      ${itemsHtml}
+    </div>
+    <div class="custom-pagination-bar">
+      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} pending</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="changePendingDisastersPage(-1)" ${pendingDisastersPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
+        <span style="font-weight: 700;">Page ${pendingDisastersPage} of ${totalPages}</span>
+        <button class="btn btn-outline btn-sm" onclick="changePendingDisastersPage(1)" ${pendingDisastersPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function changePendingDisastersPage(delta) {
+  pendingDisastersPage += delta;
+  renderAdminPendingDisasters();
 }
 
 async function adminApproveDisaster(disasterId, action) {
