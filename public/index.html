@@ -546,6 +546,19 @@
           </div>
         </div>
 
+        <!-- Emergency Command Actions Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 18px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <strong style="color: var(--text-main); font-size: 0.95rem;">⚡ Admin Actions:</strong>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadAdminData()" title="Reload all admin tables">🔄 Refresh</button>
+            <button type="button" id="deleteAllDisastersBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllIncidents()" title="Delete all reported disaster incidents">🗑️ Delete All Disasters</button>
+            <button type="button" id="deleteAllResourcesBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllResources()" title="Delete all emergency resource supply posts">📦 Delete All Resources</button>
+            <button type="button" id="resetSystemDataBtn" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: #fca5a5;" onclick="promptResetSystemData()" title="Wipe all test records & reset system">⚠️ Reset System Data</button>
+          </div>
+        </div>
+
         <!-- Filter System Top Bar -->
         <div class="admin-filter-bar">
           <div class="admin-filter-group" style="flex: 2; min-width: 220px;">
@@ -1049,6 +1062,57 @@
           <button type="submit" id="deleteResourceSubmitBtn" class="btn btn-danger" disabled>Confirm Delete</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Admin Delete All Disasters Modal -->
+  <div id="adminDeleteAllIncidentsModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">🗑️ Delete All Disaster Reports</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllIncidentsModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL disaster incidents, reports, assignments, and discussions</strong> from the live system.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllIncidentsModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllIncidentsBtn" class="btn btn-danger" onclick="executeDeleteAllIncidents()">Yes, Delete All Disasters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Delete All Resources Modal -->
+  <div id="adminDeleteAllResourcesModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">📦 Delete All Emergency Resources</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllResourcesModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL emergency resource supply posts</strong> from the database.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllResourcesModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllResourcesBtn" class="btn btn-danger" onclick="executeDeleteAllResources()">Yes, Delete All Resources</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin System Reset Modal -->
+  <div id="adminResetSystemModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">⚠️ Master System Reset</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminResetSystemModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        This will wipe all test incidents, resources, volunteer assignments, and audit logs while preserving your Administrator account.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminResetSystemModal')">Cancel</button>
+        <button type="button" id="confirmResetSystemBtn" class="btn btn-danger" onclick="executeResetSystemData()">Confirm System Reset</button>
+      </div>
     </div>
   </div>
 

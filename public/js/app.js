@@ -1720,40 +1720,7 @@ async function submitAdminEditIncident(e) {
   }
 }
 
-function promptDeleteIncident(incidentId, title) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
-    showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
-    return;
-  }
 
-  pendingDeleteIncidentId = incidentId;
-  const msgEl = document.getElementById('adminDeleteConfirmMessage');
-  if (msgEl) {
-    msgEl.textContent = `Are you sure you want to delete report #${incidentId} (${title || 'Incident'})? This action will delete the report from live systems.`;
-  }
-  openModal('adminDeleteConfirmModal');
-}
-
-async function executeDeleteIncident() {
-  if (!pendingDeleteIncidentId) return;
-
-  try {
-    await fetchAPI('/incidents/delete', {
-      method: 'POST',
-      body: { id: pendingDeleteIncidentId }
-    });
-
-    closeModal('adminDeleteConfirmModal');
-    showToast('Incident Deleted', `Disaster report #${pendingDeleteIncidentId} deleted successfully.`, 'success');
-
-    pendingDeleteIncidentId = null;
-    loadAdminReportsTable();
-    loadAdminAnalytics();
-    loadDisasters();
-  } catch (err) {
-    showToast('Delete Failed', err.message || 'Failed to delete disaster report.', 'error');
-  }
-}
 
 // ==============================================================================
 // LEAFLET MAP LOCATION PICKER & REVERSE GEOCODING
@@ -1879,7 +1846,7 @@ function promptDeleteIncident(incidentId, title) {
   pendingDeleteIncidentId = incidentId;
   const msgEl = document.getElementById('adminDeleteConfirmMessage');
   if (msgEl) {
-    msgEl.innerHTML = `Are you sure you want to delete report <strong>#${incidentId} (${escapeHtml(title)})</strong>?<br><br>This action will delete the report from live systems.`;
+    msgEl.innerHTML = `Are you sure you want to delete report <strong>#${incidentId} (${escapeHtml(title || 'Incident')})</strong>?<br><br>This will permanently remove the record from live systems.`;
   }
   openModal('adminDeleteConfirmModal');
 }
@@ -1895,8 +1862,8 @@ async function executeDeleteIncident() {
 
   try {
     await fetchAPI('/incidents/delete', {
-      method: 'DELETE',
-      body: { incidentId: pendingDeleteIncidentId }
+      method: 'POST',
+      body: { id: pendingDeleteIncidentId, incidentId: pendingDeleteIncidentId }
     });
 
     closeModal('adminDeleteConfirmModal');
@@ -1907,12 +1874,86 @@ async function executeDeleteIncident() {
     loadAdminAnalytics();
     loadDisasters();
   } catch (err) {
-    showToast('Delete Failed', err.message || 'Failed to delete report. Try again.', 'error');
+    showToast('Delete Failed', err.message || 'Failed to delete report.', 'error');
   } finally {
     if (confirmBtn) {
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Confirm Delete';
     }
+  }
+}
+
+function promptDeleteAllIncidents() {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
+    return;
+  }
+  openModal('adminDeleteAllIncidentsModal');
+}
+
+async function executeDeleteAllIncidents() {
+  const btn = document.getElementById('confirmDeleteAllIncidentsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+  try {
+    const data = await fetchAPI('/incidents/delete-all', { method: 'DELETE' });
+    closeModal('adminDeleteAllIncidentsModal');
+    showToast('All Disasters Deleted', 'All disaster reports have been cleared from live systems.', 'success');
+    loadAdminData();
+    loadDisasters();
+  } catch (err) {
+    showToast('Deletion Failed', err.message || 'Failed to delete all disasters.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Yes, Delete All Disasters'; }
+  }
+}
+
+function promptDeleteAllResources() {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
+    return;
+  }
+  openModal('adminDeleteAllResourcesModal');
+}
+
+async function executeDeleteAllResources() {
+  const btn = document.getElementById('confirmDeleteAllResourcesBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+  try {
+    const data = await fetchAPI('/resources/delete-all', { method: 'DELETE' });
+    closeModal('adminDeleteAllResourcesModal');
+    showToast('All Resources Deleted', 'All emergency resource posts have been cleared.', 'success');
+    loadAdminResourcesTable();
+    loadResources();
+    loadAdminAnalytics();
+  } catch (err) {
+    showToast('Deletion Failed', err.message || 'Failed to delete all resources.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Yes, Delete All Resources'; }
+  }
+}
+
+function promptResetSystemData() {
+  if (!currentUser || currentUser.role !== 'ADMIN') {
+    showToast('Access Denied', 'Only administrators can perform system reset.', 'error');
+    return;
+  }
+  openModal('adminResetSystemModal');
+}
+
+async function executeResetSystemData() {
+  const btn = document.getElementById('confirmResetSystemBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
+  try {
+    const data = await fetchAPI('/admin/reset-system', { method: 'POST' });
+    closeModal('adminResetSystemModal');
+    showToast('System Reset Complete', 'All operational test data has been safely cleared.', 'success');
+    loadAdminData();
+    loadDisasters();
+    loadResources();
+  } catch (err) {
+    showToast('Reset Failed', err.message || 'System reset failed.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm System Reset'; }
   }
 }
 

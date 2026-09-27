@@ -628,8 +628,8 @@ module.exports = async (req, res) => {
       return sendJson(res, 200, { success: true, count: volunteers.length, data: volunteers });
     }
 
-    // 6.3 Delete Incident
-    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/incidents/delete' || pathname.startsWith('/api/incidents/delete') || (method === 'DELETE' && (pathname.includes('/incidents/') || pathname.includes('/disasters/'))))) {
+    // 6.3 Delete Incident (Individual)
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/incidents/delete' || pathname.startsWith('/api/incidents/delete') || (method === 'DELETE' && (pathname.includes('/incidents/') || pathname.includes('/disasters/')) && !pathname.includes('delete-all')))) {
       const parts = pathname.split('/').filter(Boolean);
       const lastPart = parseInt(parts[parts.length - 1]);
       const incidentId = parseInt(body.incidentId || body.id || body.disasterId || parsedUrl.query.id || parsedUrl.query.incidentId || (isNaN(lastPart) ? null : lastPart));
@@ -640,6 +640,18 @@ module.exports = async (req, res) => {
 
       const deleted = await supabaseDb.deleteDisaster(incidentId);
       return sendJson(res, 200, { success: true, message: `Incident #${incidentId} deleted successfully.`, data: deleted });
+    }
+
+    // 6.4 Delete ALL Incidents / Reports
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/incidents/delete-all' || pathname === '/api/disasters/delete-all' || pathname === '/api/admin/delete-all-incidents' || pathname === '/api/admin/delete-all-disasters')) {
+      const caller = await getAuthUser(req);
+      const roleUpper = caller ? String(caller.role).trim().toUpperCase() : '';
+      if (!['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(roleUpper)) {
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+      }
+
+      const deleted = await supabaseDb.deleteAllDisasters();
+      return sendJson(res, 200, { success: true, message: 'All disaster incidents deleted successfully.', count: deleted ? deleted.length : 0 });
     }
 
     if (method === 'PATCH' && (pathname.includes('/disasters/') || pathname.includes('/incidents/')) && pathname.endsWith('/status')) {
@@ -759,7 +771,7 @@ module.exports = async (req, res) => {
       return sendJson(res, 200, { success: true, message: `Resource #${resId} updated successfully.`, data: updated });
     }
 
-    if ((method === 'DELETE' || method === 'POST') && pathname === '/api/resources/delete') {
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/resources/delete' || (method === 'DELETE' && pathname.startsWith('/api/resources/') && !pathname.includes('delete-all')))) {
       const resId = parseInt(body.id || body.resourceId || parsedUrl.query.id || parsedUrl.query.resourceId);
       if (!resId || isNaN(resId)) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid resource ID is required for deletion.' });
@@ -767,6 +779,17 @@ module.exports = async (req, res) => {
 
       const deleted = await supabaseDb.deleteResource(resId);
       return sendJson(res, 200, { success: true, message: `Resource #${resId} deleted successfully.`, data: deleted });
+    }
+
+    if ((method === 'DELETE' || method === 'POST') && (pathname === '/api/resources/delete-all' || pathname === '/api/admin/delete-all-resources')) {
+      const caller = await getAuthUser(req);
+      const roleUpper = caller ? String(caller.role).trim().toUpperCase() : '';
+      if (!['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(roleUpper)) {
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+      }
+
+      const deleted = await supabaseDb.deleteAllResources();
+      return sendJson(res, 200, { success: true, message: 'All emergency resource supply posts deleted successfully.', count: deleted ? deleted.length : 0 });
     }
 
     // 10. Comments

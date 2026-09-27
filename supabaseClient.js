@@ -415,6 +415,33 @@ const supabaseDb = {
     return data && data.length > 0 ? data[0] : { id };
   },
 
+  async deleteAllDisasters() {
+    await Promise.allSettled([
+      supabase.from('reports').delete().neq('id', -1),
+      supabase.from('assignments').delete().neq('id', -1),
+      supabase.from('resources').delete().neq('id', -1),
+      supabase.from('comments').delete().neq('id', -1)
+    ]);
+
+    const { data, error } = await supabase
+      .from('disasters')
+      .delete()
+      .neq('id', -1)
+      .select();
+    if (error) throw error;
+    return data || [];
+  },
+
+  async deleteAllResources() {
+    const { data, error } = await supabase
+      .from('resources')
+      .delete()
+      .neq('id', -1)
+      .select();
+    if (error) throw error;
+    return data || [];
+  },
+
   async getPendingDisasters() {
     const { data, error } = await supabase
       .from('disasters')
