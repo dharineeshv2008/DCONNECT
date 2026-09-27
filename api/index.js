@@ -142,9 +142,17 @@ module.exports = async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   let rawPath = req.__explicitPath || '';
 
-  // 2. Query param __path from vercel.json rewrite: /api/index.js?__path=$1
-  if (!rawPath && parsedUrl.query && parsedUrl.query.__path) {
-    rawPath = '/api/' + String(parsedUrl.query.__path);
+  // 2. Query param __path or path from Vercel [...path].js
+  if (!rawPath && parsedUrl.query) {
+    if (parsedUrl.query.__path) {
+      rawPath = '/api/' + String(parsedUrl.query.__path);
+    } else if (parsedUrl.query.path) {
+      if (Array.isArray(parsedUrl.query.path)) {
+        rawPath = '/api/' + parsedUrl.query.path.join('/');
+      } else {
+        rawPath = '/api/' + String(parsedUrl.query.path);
+      }
+    }
   }
 
   // 3. Fallback to standard request headers and req.url (NEVER USE x-matched-path because it is the filesystem lambda path)
