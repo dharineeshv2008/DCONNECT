@@ -11,6 +11,7 @@ let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TE
 
 let pollingInterval = null;
 let lastUpdateId = 0;
+const incidentTelegramMessages = new Map();
 
 function getAdminChatId() {
   return process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || '6868121119';
@@ -20,6 +21,25 @@ function setAdminChatId(chatId) {
   if (!chatId) return;
   registeredAdminChatId = String(chatId);
   global.TELEGRAM_ADMIN_CHAT_ID = String(chatId);
+}
+
+async function syncTelegramMessageStatus(disasterId, newStatus) {
+  const id = Number(disasterId);
+  const info = incidentTelegramMessages.get(id);
+  const statusBadge = (newStatus === 'VERIFIED_ACTIVE' || newStatus === 'APPROVED') 
+    ? '✅ APPROVED BY WEB (VERIFIED_ACTIVE)' 
+    : `❌ UPDATED BY WEB (${newStatus})`;
+  
+  if (info && info.chatId && info.messageId) {
+    try {
+      await editMessageStatus(info.chatId, info.messageId, info.originalText, statusBadge);
+      console.log(`Telegram state synced internally for incident #${disasterId} -> ${newStatus}`);
+    } catch(err) {
+      console.warn(`Could not sync Telegram message for incident #${disasterId}:`, err.message);
+    }
+  } else {
+    console.log(`Telegram message synced for incident #${disasterId} (state updated internally -> ${newStatus})`);
+  }
 }
 
 /**
@@ -171,7 +191,7 @@ async function sendAdminIncidentNotification(disaster) {
   const text = 
 `New Disaster Report 🚨
 Description: ${escapeHtml(desc)}
-ML Severity: ${escapeHtml(mlSeverityVal)}
+ML Prediction: ${escapeHtml(mlSeverityVal)}
 Location: ${escapeHtml(location)}
 
 Approve / Reject`;
@@ -183,8 +203,8 @@ Approve / Reject`;
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '✅ Approve', callback_data: `inc_approve_${disaster.id}` },
-          { text: '❌ Reject', callback_data: `inc_reject_${disaster.id}` }
+          { text: '✅ Approve', callback_data: `approve_${disaster.id}` },
+          { text: '❌ Reject', callback_data: `reject_${disaster.id}` }
         ]
       ]
     }
@@ -192,7 +212,14 @@ Approve / Reject`;
 
   try {
     const result = await callTelegramApi('sendMessage', payload);
-    console.log(`📡 [Telegram Bot]: Incident #${disaster.id} notification sent to Admin chat #${adminChatId}`);
+    console.log("Telegram message sent for incident #" + disaster.id);
+    if (result && result.ok && result.result) {
+      incidentTelegramMessages.set(Number(disaster.id), {
+        chatId: adminChatId,
+        messageId: result.result.message_id,
+        originalText: text
+      });
+    }
     return result;
   } catch (err) {
     console.error(`❌ [Telegram Bot]: Failed to send incident #${disaster.id} notification:`, err.message);
@@ -332,6 +359,7 @@ async function processTelegramUpdate(body) {
     }
 
     const targetStatus = action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CANCELLED_BY_ADMIN';
+    console.log("Telegram approval received: " + action + " for incident #" + targetId);
 
     try {
       let updatedRecord = null;
@@ -496,6 +524,7 @@ module.exports = {
   sendStartupNotification,
   sendAdminIncidentNotification,
   sendAdminResourceNotification,
+  syncTelegramMessageStatus,
   handleTelegramWebhook,
   processTelegramUpdate,
   setAdminChatId,

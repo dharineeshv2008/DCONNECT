@@ -29,16 +29,18 @@ document.addEventListener('DOMContentLoaded', () => {
   initSupabaseRealtime();
   restoreSession();
 
-  // Requirement 8: Real-time 2s periodic polling fallback sync
+  // Requirement 10: Optimized 2s periodic polling sync (only active when tab is visible)
   setInterval(() => {
-    if (currentUser && currentUser.approved) {
-      const activeTab = document.querySelector('.tab-content.active');
+    if (document.visibilityState === 'visible' && currentUser && currentUser.approved) {
+      const activeTab = document.querySelector('.tab-pane.active');
       if (activeTab && activeTab.id === 'feedTab') {
         loadDisasters();
-      } else if (activeTab && activeTab.id === 'adminTab') {
+      } else if (activeTab && activeTab.id === 'adminTab' && isAdminUser(currentUser)) {
         loadAdminReportsTable();
       } else if (activeTab && activeTab.id === 'volunteerTab') {
-        loadVolunteersDirectory();
+        loadVolunteerData();
+      } else if (activeTab && activeTab.id === 'resourceTab') {
+        loadResources();
       }
     }
   }, 2000);
@@ -47,7 +49,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
 async function fetchAPI(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const token = (currentUser && currentUser.token) || localStorage.getItem('dconnect_token');
   const defaultHeaders = { 'Content-Type': 'application/json' };
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  }
   
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
     options.body = JSON.stringify(options.body);
@@ -411,14 +417,19 @@ function handleLoginInputChange() {
 
 function restoreSession() {
   const stored = localStorage.getItem('dconnect_user');
+  const storedToken = localStorage.getItem('dconnect_token');
   if (stored) {
     try {
       currentUser = JSON.parse(stored);
+      if (storedToken && currentUser) {
+        currentUser.token = storedToken;
+      }
       showDashboardApp();
       updateUserUI();
       loadDisasters();
     } catch (e) {
       localStorage.removeItem('dconnect_user');
+      localStorage.removeItem('dconnect_token');
       showAuthLanding();
     }
   } else {
@@ -442,6 +453,12 @@ function showDashboardApp() {
   document.getElementById('mainDashboardApp').style.display = 'flex';
 }
 
+function isAdminUser(user) {
+  if (!user || !user.role) return false;
+  const r = String(user.role).trim().toUpperCase();
+  return ['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(r);
+}
+
 function updateUserUI() {
   const roleBadge = document.getElementById('userBadgeRole');
   const nameDisp = document.getElementById('userNameDisplay');
@@ -452,10 +469,10 @@ function updateUserUI() {
     roleBadge.className = `badge badge-${currentUser.role.toLowerCase().replace('_', '')}`;
     nameDisp.textContent = currentUser.name + (currentUser.organizationName ? ` (${currentUser.organizationName})` : '');
 
-    if (currentUser.role === 'ADMIN') {
-      adminNav.style.display = 'block';
+    if (isAdminUser(currentUser)) {
+      if (adminNav) adminNav.style.display = 'inline-block';
     } else {
-      adminNav.style.display = 'none';
+      if (adminNav) adminNav.style.display = 'none';
     }
 
     if (!currentUser.approved && (currentUser.role === 'NGO' || currentUser.role === 'GOVERNMENT_AGENCY')) {
@@ -467,6 +484,7 @@ function updateUserUI() {
 function logout() {
   currentUser = null;
   localStorage.removeItem('dconnect_user');
+  localStorage.removeItem('dconnect_token');
   hideAllErrorViews();
   showAuthLanding();
   showToast('Logged Out', 'You have been safely signed out.', 'info');
@@ -525,6 +543,9 @@ async function handleLandingLogin(e) {
     });
 
     currentUser = data.data;
+    if (currentUser && currentUser.token) {
+      localStorage.setItem('dconnect_token', currentUser.token);
+    }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     
     document.getElementById('landingLoginPassword').value = '';
@@ -569,6 +590,9 @@ async function handleRegister(e) {
     });
 
     currentUser = data.data;
+    if (currentUser && currentUser.token) {
+      localStorage.setItem('dconnect_token', currentUser.token);
+    }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     closeModal('registerModal');
     
@@ -907,47 +931,97 @@ async function loadVolunteerData() {
   loadVolunteersDirectory();
 }
 
+let volunteerAssignmentsListCache = [];
+let volunteerAssignmentsPage = 1;
+
 async function loadVolunteerAssignments() {
   const container = document.getElementById('volunteerAssignmentsList');
   if (!container) return;
 
-  let url = '/volunteers/assignments';
-
   try {
-    const data = await fetchAPI(url);
-    const list = data.data || [];
-    if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No rescue mission assignments found.</p>`;
-      return;
-    }
+    const data = await fetchAPI('/volunteers/assignments');
+    volunteerAssignmentsListCache = data.data || [];
+    renderVolunteerAssignments();
+  } catch (err) {
+    handleApiError(err);
+  }
+}
 
-    container.innerHTML = list.map(a => `
+function renderVolunteerAssignments() {
+  const container = document.getElementById('volunteerAssignmentsList');
+  if (!container) return;
+
+  if (volunteerAssignmentsListCache.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No rescue mission assignments found.</p>`;
+    return;
+  }
+
+  const listPageSize = 10;
+  const total = volunteerAssignmentsListCache.length;
+  const totalPages = Math.ceil(total / listPageSize) || 1;
+  if (volunteerAssignmentsPage > totalPages) volunteerAssignmentsPage = totalPages;
+  if (volunteerAssignmentsPage < 1) volunteerAssignmentsPage = 1;
+
+  const startIdx = (volunteerAssignmentsPage - 1) * listPageSize;
+  const pageItems = volunteerAssignmentsListCache.slice(startIdx, startIdx + listPageSize);
+
+  const itemsHtml = pageItems.map(a => {
+    const statusVal = (a.status || 'ASSIGNED').toUpperCase();
+    let badgeClass = 'badge-medium';
+    let statusLabel = `📌 ${statusVal}`;
+    if (statusVal === 'IN_PROGRESS') { badgeClass = 'badge-status-active'; statusLabel = `⚡ IN_PROGRESS`; }
+    if (statusVal === 'COMPLETED') { badgeClass = 'badge-low'; statusLabel = `✓✓ COMPLETED`; }
+    if (statusVal === 'CANCELLED') { badgeClass = 'badge-high'; statusLabel = `✕ CANCELLED`; }
+
+    const canEditStatus = currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO' || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'GOVERNMENT');
+
+    return `
       <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong>🎯 ${escapeHtml(a.taskTitle)}</strong>
-          <span class="badge badge-status-${a.status.toLowerCase()}">${a.status}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+          <strong style="font-size: 0.95rem; color: var(--text-main);">🎯 ${escapeHtml(a.taskTitle)}</strong>
+          <span class="badge ${badgeClass}" style="font-weight: 700;">${statusLabel}</span>
         </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
-          Disaster: <em>${escapeHtml(a.disasterTitle)}</em> | Volunteer: <strong>${escapeHtml(a.volunteerName)}</strong> (${escapeHtml(a.volunteerPhone)})
+        <div style="font-size: 0.83rem; color: var(--text-muted); margin: 6px 0;">
+          🚨 Disaster: <em>${escapeHtml(a.disasterTitle || 'Emergency Incident')}</em><br>
+          🧑‍🚒 Volunteer: <strong>${escapeHtml(a.volunteerName)}</strong> (${escapeHtml(a.volunteerPhone || 'N/A')})
         </div>
-        <p style="font-size: 0.85rem; margin: 6px 0;">${escapeHtml(a.taskDescription)}</p>
+        <p style="font-size: 0.85rem; margin: 6px 0; color: var(--text-dark, #334155); background: var(--bg-hover, #f8fafc); padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--primary);">
+          ${escapeHtml(a.taskDescription)}
+        </p>
         
-        ${currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO') ? `
+        ${canEditStatus ? `
           <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 0.8rem; font-weight: 700;">Status:</label>
-            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem;" onchange="updateMissionStatus(${a.id}, this.value)">
-              <option value="ASSIGNED" ${a.status === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
-              <option value="IN_PROGRESS" ${a.status === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
-              <option value="COMPLETED" ${a.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
-              <option value="CANCELLED" ${a.status === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
+            <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">Status:</label>
+            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem; height: 32px;" onchange="updateMissionStatus(${a.id}, this.value)">
+              <option value="ASSIGNED" ${statusVal === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
+              <option value="IN_PROGRESS" ${statusVal === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
+              <option value="COMPLETED" ${statusVal === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
+              <option value="CANCELLED" ${statusVal === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
             </select>
           </div>
         ` : ''}
       </div>
-    `).join('');
-  } catch (err) {
-    handleApiError(err);
-  }
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="fixed-scroll-container">
+      ${itemsHtml}
+    </div>
+    <div class="custom-pagination-bar">
+      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} missions</span>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="changeVolunteerAssignmentPage(-1)" ${volunteerAssignmentsPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
+        <span style="font-weight: 700;">Page ${volunteerAssignmentsPage} of ${totalPages}</span>
+        <button class="btn btn-outline btn-sm" onclick="changeVolunteerAssignmentPage(1)" ${volunteerAssignmentsPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
+      </div>
+    </div>
+  `;
+}
+
+function changeVolunteerAssignmentPage(delta) {
+  volunteerAssignmentsPage += delta;
+  renderVolunteerAssignments();
 }
 
 async function updateMissionStatus(assignmentId, newStatus) {
@@ -1336,7 +1410,7 @@ let adminSearchDebounceTimer = null;
 let pendingDeleteIncidentId = null;
 
 async function loadAdminData() {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!isAdminUser(currentUser)) {
     showAccessDeniedView();
     return;
   }
@@ -1769,13 +1843,13 @@ async function submitAdminEditIncident(e) {
   const longitude = parseFloat(document.getElementById('adminEditLongitude').value);
 
   try {
-    const data = await fetchAPI('/incidents/edit', {
-      method: 'POST',
-      body: { id, title, description, severity, status, locationName, latitude, longitude }
+    const data = await fetchAPI(`/disasters/${id}`, {
+      method: 'PUT',
+      body: { title, description, severity, status, locationName, latitude, longitude }
     });
 
     closeModal('adminEditIncidentModal');
-    showToast('Incident Updated', `Incident #${id} details updated successfully.`, 'success');
+    showToast('Updated successfully', `Incident #${id} details updated successfully.`, 'success');
 
     loadAdminReportsTable();
     loadDisasters();
@@ -2111,7 +2185,6 @@ function renderAdminPendingDisasters() {
           <strong>🚨 [${d.type}] ${escapeHtml(d.title)}</strong>
           <div style="display: flex; gap: 4px; align-items: center;">
             <span class="badge badge-${mlSev.toLowerCase()}">🤖 ${mlSev}</span>
-            <span class="badge badge-${d.severity.toLowerCase()}">${d.severity}</span>
           </div>
         </div>
         <p style="font-size: 0.85rem; margin: 4px 0;">${escapeHtml(d.description)}</p>
@@ -2213,4 +2286,67 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ==============================================================================
+// 13. MASTER RESET SYSTEM (DOUBLE LEVEL VERIFICATION)
+// ==============================================================================
+
+function promptMasterResetStep1() {
+  if (!currentUser || !isAdminUser(currentUser)) {
+    showToast('Access Denied', 'Only administrators can trigger system reset.', 'error');
+    return;
+  }
+  openModal('masterResetStep1Modal');
+}
+
+function handleMasterResetStep1Continue() {
+  closeModal('masterResetStep1Modal');
+  const textInput = document.getElementById('masterResetTextInput');
+  const submitBtn = document.getElementById('masterResetSubmitBtn');
+  if (textInput) {
+    textInput.value = '';
+    textInput.oninput = (e) => {
+      const val = (e.target.value || '').trim();
+      if (submitBtn) submitBtn.disabled = (val !== 'CONFIRM');
+    };
+  }
+  if (submitBtn) submitBtn.disabled = true;
+  openModal('masterResetStep2Modal');
+}
+
+async function handleMasterResetStep2Submit(e) {
+  e.preventDefault();
+  const textVal = (document.getElementById('masterResetTextInput')?.value || '').trim();
+  if (textVal !== 'CONFIRM') {
+    showToast('Verification Required', 'Please type CONFIRM to proceed.', 'warning');
+    return;
+  }
+
+  const submitBtn = document.getElementById('masterResetSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Resetting System...';
+  }
+
+  try {
+    const data = await fetchAPI('/admin/reset-system', {
+      method: 'POST',
+      body: {}
+    });
+
+    closeModal('masterResetStep2Modal');
+    showToast('System reset completed successfully', data.message || 'System reset completed successfully', 'success');
+
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  } catch (err) {
+    showToast('Reset Failed', err.message || 'Failed to reset system data.', 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'CONFIRM DELETE';
+    }
+  }
 }

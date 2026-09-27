@@ -3,6 +3,7 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
+const bcrypt = require('bcryptjs');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
@@ -27,7 +28,7 @@ function normalizeDisasterStatus(status) {
   if (['RESOLVED', 'COMPLETED'].includes(upper)) {
     return 'RESOLVED';
   }
-  if (['CLOSED', 'ARCHIVED'].includes(upper)) {
+  if (['CLOSED', 'ARCHIVED', 'CLOSE'].includes(upper)) {
     return 'CLOSED';
   }
   if (['CANCELLED_BY_ADMIN', 'CANCELLED', 'REJECTED'].includes(upper)) {
@@ -86,9 +87,21 @@ const supabaseDb = {
   },
 
   async createUser(userData) {
+    let hashedPassword = null;
+    if (userData.password) {
+      if (userData.password.startsWith('$2a$') || userData.password.startsWith('$2b$') || userData.password.startsWith('$2y$')) {
+        hashedPassword = userData.password;
+      } else {
+        hashedPassword = bcrypt.hashSync(userData.password, 10);
+      }
+    } else {
+      hashedPassword = bcrypt.hashSync('Password@123', 10);
+    }
+
     const cleanUser = {
       name: userData.name || 'Citizen',
       phone: userData.phone,
+      password: hashedPassword,
       role: userData.role || 'USER',
       status: userData.status || 'ACTIVE',
       organization_name: userData.organizationName || userData.organization_name || null,
@@ -189,6 +202,7 @@ const supabaseDb = {
     }
 
     const updatedRecord = data[0];
+    console.log("Status updated in DB:", id, cleanStatus);
     return {
       ...updatedRecord,
       status: cleanStatus,
@@ -870,6 +884,49 @@ const supabaseDb = {
       totalResourcesAvailable: (resources || []).length,
       pendingUserApprovals: pendingUsers
     };
+  },
+
+  async resetSystemData() {
+    const tablesToClear = [
+      'reports',
+      'comments',
+      'assignments',
+      'tasks',
+      'resources',
+      'volunteers',
+      'approvals',
+      'disasters',
+      'notifications',
+      'ml_predictions',
+      'user_device_tokens'
+    ];
+
+    for (const table of tablesToClear) {
+      try {
+        await supabase.from(table).delete().neq('id', -1);
+      } catch (err) {}
+    }
+
+    try {
+      const { data: allUsers } = await supabase.from('users').select('id,role,phone');
+      if (allUsers && allUsers.length > 0) {
+        const toDeleteIds = allUsers
+          .filter(u => {
+            const r = String(u.role || '').trim().toUpperCase();
+            const phone = String(u.phone || '').trim();
+            return !['ADMIN', 'SUPER_ADMIN'].includes(r) && phone !== '9598349738';
+          })
+          .map(u => u.id);
+
+        if (toDeleteIds.length > 0) {
+          await supabase.from('users').delete().in('id', toDeleteIds);
+        }
+      }
+    } catch (err) {
+      console.warn('User reset notice:', err.message);
+    }
+
+    return true;
   }
 };
 

@@ -71,6 +71,12 @@ def predict_severity(req: PredictionRequest):
     if not req.description or len(req.description.strip()) == 0:
         raise HTTPException(status_code=400, detail="Description text cannot be empty.")
         
+    desc_lower = req.description.lower()
+    rules = ["dying", "urgent", "trapped", "help"]
+    if any(w in desc_lower for w in rules):
+        print("ML prediction generated: CRITICAL (Rule Override)")
+        return PredictionResponse(severity="CRITICAL")
+
     if MODEL is None or VECTORIZER is None:
         load_ml_artifacts()
         if MODEL is None or VECTORIZER is None:
@@ -81,6 +87,7 @@ def predict_severity(req: PredictionRequest):
     preds = MODEL.predict(vec)
     predicted_severity = preds[0] if isinstance(preds, (list, np.ndarray)) else str(preds)
     
+    print(f"ML prediction generated: {predicted_severity}")
     return PredictionResponse(severity=str(predicted_severity))
 
 if __name__ == "__main__":
