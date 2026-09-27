@@ -3,7 +3,7 @@
  * Realtime Supabase Subscriptions, Toast Notifications, and Strict Manual Auth
  */
 
-const API_BASE = '/api';
+const API_BASE = (typeof window !== 'undefined' && window.REACT_APP_API_URL) || (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) || '/api';
 
 // Supabase Project Credentials
 const SUPABASE_CONFIG = {
@@ -49,10 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
 async function fetchAPI(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-  const token = (currentUser && currentUser.token) || localStorage.getItem('dconnect_token');
+  const token = (currentUser && currentUser.token) || localStorage.getItem('token') || localStorage.getItem('dconnect_token');
   const defaultHeaders = { 'Content-Type': 'application/json' };
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
+    console.log("Token received:", token);
+    console.log("User role:", currentUser ? currentUser.role : "UNKNOWN");
+    console.log("API called:", url);
   }
   
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
@@ -417,7 +420,7 @@ function handleLoginInputChange() {
 
 function restoreSession() {
   const stored = localStorage.getItem('dconnect_user');
-  const storedToken = localStorage.getItem('dconnect_token');
+  const storedToken = localStorage.getItem('token') || localStorage.getItem('dconnect_token');
   if (stored) {
     try {
       currentUser = JSON.parse(stored);
@@ -430,6 +433,7 @@ function restoreSession() {
     } catch (e) {
       localStorage.removeItem('dconnect_user');
       localStorage.removeItem('dconnect_token');
+      localStorage.removeItem('token');
       showAuthLanding();
     }
   } else {
@@ -485,6 +489,7 @@ function logout() {
   currentUser = null;
   localStorage.removeItem('dconnect_user');
   localStorage.removeItem('dconnect_token');
+  localStorage.removeItem('token');
   hideAllErrorViews();
   showAuthLanding();
   showToast('Logged Out', 'You have been safely signed out.', 'info');
@@ -545,6 +550,7 @@ async function handleLandingLogin(e) {
     currentUser = data.data;
     if (currentUser && currentUser.token) {
       localStorage.setItem('dconnect_token', currentUser.token);
+      localStorage.setItem('token', currentUser.token);
     }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     

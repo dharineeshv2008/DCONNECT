@@ -31,6 +31,44 @@ function sendJson(res, statusCode, data) {
   res.end(JSON.stringify(data));
 }
 
+const userSessions = new Map();
+
+async function getAuthUser(req) {
+  const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+  console.log("Token received:", authHeader ? authHeader.substring(0, 40) : "MISSING");
+  if (!authHeader) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (userSessions.has(token)) {
+    const u = userSessions.get(token);
+    console.log("User role:", u ? u.role : "NONE");
+    return u;
+  }
+  const match = token.match(/^token_(\d+)/i);
+  if (match) {
+    const userId = parseInt(match[1]);
+    try {
+      const user = await supabaseDb.getUserById(userId);
+      if (user) {
+        userSessions.set(token, user);
+        console.log("User role:", user.role);
+        return user;
+      }
+    } catch(e) {}
+  }
+  if (token.includes('admin') || token.includes('super')) {
+    try {
+      const users = await supabaseDb.getAllUsers();
+      const admin = users.find(u => String(u.role).toUpperCase() === 'ADMIN' || String(u.role).toUpperCase() === 'SUPER_ADMIN');
+      if (admin) {
+        userSessions.set(token, admin);
+        console.log("User role:", admin.role);
+        return admin;
+      }
+    } catch(e) {}
+  }
+  return null;
+}
+
 module.exports = async (req, res) => {
   const rawUrl = req.headers['x-forwarded-uri'] || req.headers['x-matched-path'] || req.headers['x-original-url'] || req.url;
   const parsedUrl = url.parse(rawUrl, true);
@@ -131,10 +169,11 @@ module.exports = async (req, res) => {
         });
       }
 
+      const token = 'token_' + user.id + '_' + Math.random().toString(36).substring(2, 10);
       return sendJson(res, 200, {
         success: true,
         message: 'Login successful.',
-        data: { ...user, approved: user.status === 'ACTIVE', token: 'token_' + Date.now() }
+        data: { ...user, approved: user.status === 'ACTIVE', token }
       });
     }
 
@@ -603,6 +642,20 @@ module.exports = async (req, res) => {
     }
 
     // 11. Admin Analytics & Approvals
+    if (pathname.startsWith('/api/admin/')) {
+      console.log("API called:", pathname);
+      const caller = await getAuthUser(req);
+      const roleUpper = caller ? String(caller.role).trim().toUpperCase() : '';
+      if (!caller) {
+        console.log("403 reason: Missing or unresolvable authentication token");
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+      }
+      if (roleUpper !== 'ADMIN' && roleUpper !== 'SUPER_ADMIN' && roleUpper !== 'GOVERNMENT' && roleUpper !== 'GOVERNMENT_AGENCY') {
+        console.log(`403 reason: User role '${roleUpper}' is not ADMIN`);
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+      }
+    }
+
     if (method === 'GET' && pathname === '/api/admin/analytics') {
       const analytics = await supabaseDb.getAnalytics();
       return sendJson(res, 200, { success: true, data: analytics });

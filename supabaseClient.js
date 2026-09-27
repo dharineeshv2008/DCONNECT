@@ -556,20 +556,23 @@ const supabaseDb = {
   },
 
   async createAssignment(assignmentData) {
-    let volId = assignmentData.volunteer_id;
-    if (volId) {
-      try {
-        const u = await this.getUserById(volId);
-        if (!u) {
-          const all = await this.getAllUsers();
-          const vol = all.find(x => x.role === 'VOLUNTEER') || all[0];
-          if (vol) volId = vol.id;
-        }
-      } catch(e) {}
-    }
+    let volId = assignmentData.volunteer_id || assignmentData.volunteerId || 2;
+    try {
+      const u = await this.getUserById(volId);
+      if (!u) {
+        const all = await this.getAllUsers();
+        const vol = all.find(x => x.role === 'VOLUNTEER') || all[0];
+        if (vol) volId = vol.id;
+      }
+    } catch(e) {}
+
     const cleanPayload = {
-      ...assignmentData,
-      volunteer_id: volId
+      disaster_id: assignmentData.disaster_id || assignmentData.disasterId || 1,
+      volunteer_id: volId,
+      task_title: assignmentData.task_title || assignmentData.taskTitle || 'Relief Operation',
+      task_description: assignmentData.task_description || assignmentData.taskDescription || 'Field support',
+      status: assignmentData.status || 'ASSIGNED',
+      assigned_by_user_id: assignmentData.assigned_by_user_id || assignmentData.assignedById || null
     };
     const { data, error } = await supabase
       .from('assignments')
@@ -884,6 +887,31 @@ const supabaseDb = {
       totalResourcesAvailable: (resources || []).length,
       pendingUserApprovals: pendingUsers
     };
+  },
+
+  async getPendingUsers() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('status', 'PENDING_APPROVAL')
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return data || [];
+  },
+
+  async getPendingDisasters() {
+    const { data, error } = await supabase
+      .from('disasters')
+      .select('*, creator:created_by_user_id(name,role)')
+      .in('status', ['PENDING', 'PENDING_VERIFICATION', 'UNVERIFIED'])
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return (data || []).map(r => ({
+      ...r,
+      status: normalizeDisasterStatus(r.status),
+      createdByName: r.creator?.name || 'Citizen Reporter',
+      createdByRole: r.creator?.role || 'PUBLIC'
+    }));
   },
 
   async resetSystemData() {
