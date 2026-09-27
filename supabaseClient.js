@@ -105,7 +105,11 @@ const supabaseDb = {
       role: userData.role || 'USER',
       status: userData.status || 'ACTIVE',
       organization_name: userData.organizationName || userData.organization_name || null,
-      organization_reg_no: userData.organizationRegNo || userData.organization_reg_no || null
+      organization_reg_no: userData.organizationRegNo || userData.organization_reg_no || null,
+      home_lat: userData.home_lat !== undefined && userData.home_lat !== null && !isNaN(parseFloat(userData.home_lat)) ? parseFloat(userData.home_lat) : (userData.homeLat !== undefined && userData.homeLat !== null && !isNaN(parseFloat(userData.homeLat)) ? parseFloat(userData.homeLat) : null),
+      home_lng: userData.home_lng !== undefined && userData.home_lng !== null && !isNaN(parseFloat(userData.home_lng)) ? parseFloat(userData.home_lng) : (userData.homeLng !== undefined && userData.homeLng !== null && !isNaN(parseFloat(userData.homeLng)) ? parseFloat(userData.homeLng) : null),
+      home_address: userData.home_address || userData.homeAddress || null,
+      fcm_token: userData.fcm_token || userData.fcmToken || null
     };
 
     const { data, error } = await supabase
@@ -140,6 +144,37 @@ const supabaseDb = {
       .select();
     if (error) throw error;
     return data && data.length > 0 ? data[0] : null;
+  },
+
+  async saveUserDeviceToken(userId, token) {
+    if (!token) return null;
+    if (userId) {
+      await supabase.from('users').update({ fcm_token: token }).eq('id', userId);
+      try {
+        await supabase.from('user_device_tokens').upsert([{ user_id: userId, token }], { onConflict: 'token' });
+      } catch (e) {
+        console.warn('Device token insert notice:', e.message);
+      }
+    }
+    return { success: true, token };
+  },
+
+  async getUsersInRadius(disasterLat, disasterLng, radiusKm = 30.0) {
+    const { data: users, error } = await supabase.from('users').select('*');
+    if (error) throw error;
+    const dLat1 = parseFloat(disasterLat);
+    const dLng1 = parseFloat(disasterLng);
+    if (isNaN(dLat1) || isNaN(dLng1)) return [];
+
+    return (users || []).filter(u => {
+      const uLat = u.home_lat !== null && u.home_lat !== undefined ? parseFloat(u.home_lat) : null;
+      const uLng = u.home_lng !== null && u.home_lng !== undefined ? parseFloat(u.home_lng) : null;
+      if (uLat !== null && uLng !== null && !isNaN(uLat) && !isNaN(uLng)) {
+        const d = calculateDistanceKm(dLat1, dLng1, uLat, uLng);
+        return d <= radiusKm;
+      }
+      return false;
+    });
   },
 
   async getPendingUsers() {

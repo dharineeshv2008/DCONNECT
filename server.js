@@ -198,6 +198,43 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // Health Check Endpoint
+    if (method === 'GET' && (pathname === '/api/health' || pathname === '/health')) {
+      return sendJson(res, 200, { success: true, message: 'D-Connect Disaster Management API is operational and ready.' });
+    }
+
+    // FCM Device Token Registration Endpoint
+    if (method === 'POST' && (pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token')) {
+      const body = await parseBody(req);
+      const caller = await getAuthUser(req);
+      const token = body.token || body.fcmToken || body.fcm_token;
+      const userId = caller ? caller.id : (body.userId || body.user_id || null);
+      if (!token) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'FCM device token is required.' });
+      }
+      if (userId) {
+        await supabaseDb.saveUserDeviceToken(userId, token).catch(err => console.warn('Device token save notice:', err.message));
+      }
+      return sendJson(res, 200, { success: true, message: 'FCM Device token registered successfully.', token });
+    }
+
+    // Location-Based 30km Radius Alert System Endpoint
+    if (method === 'POST' && (pathname === '/api/notifications/check-nearby-alerts' || pathname === '/api/notifications/check_nearby_alerts')) {
+      const body = await parseBody(req);
+      const lat = parseFloat(body.latitude || body.lat || 13.0827);
+      const lng = parseFloat(body.longitude || body.lng || 80.2707);
+      const radiusKm = parseFloat(body.radiusKm || body.radius_km || 30.0);
+
+      const nearbyUsers = await supabaseDb.getUsersInRadius(lat, lng, radiusKm).catch(() => []);
+      return sendJson(res, 200, {
+        success: true,
+        disasterId: body.disasterId || null,
+        radiusKm: radiusKm,
+        notifiedUsersCount: nearbyUsers ? nearbyUsers.length : 0,
+        notifiedUsers: nearbyUsers || []
+      });
+    }
+
     // Telegram Webhook Endpoint (Tests 44, 77, 78, 80)
     if (pathname === '/api/telegram/webhook') {
       return handleTelegramWebhook(req, res);
@@ -358,7 +395,11 @@ const server = http.createServer(async (req, res) => {
         role: role,
         status: initialStatus,
         organization_name: sanitizeText(body.organizationName || null),
-        organization_reg_no: sanitizeText(body.organizationRegNo || null)
+        organization_reg_no: sanitizeText(body.organizationRegNo || null),
+        home_lat: body.homeLat !== undefined ? body.homeLat : (body.home_lat !== undefined ? body.home_lat : null),
+        home_lng: body.homeLng !== undefined ? body.homeLng : (body.home_lng !== undefined ? body.home_lng : null),
+        home_address: sanitizeText(body.homeAddress || body.home_address || null),
+        fcm_token: body.fcmToken || body.fcm_token || null
       });
 
       if (role === 'VOLUNTEER' && newUser) {

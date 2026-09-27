@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>D-Connect | Disaster Management Coordination App</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
   <link rel="icon" type="image/png" href="assets/logo.png">
   <link rel="shortcut icon" type="image/png" href="assets/logo.png">
   <link rel="stylesheet" href="css/style.css">
@@ -13,8 +15,8 @@
 <body>
 
   <!-- No Internet State Banner -->
-  <div id="offlineBanner">
-    ⚠️ Network connection lost! Working in offline mode. Reconnecting...
+  <div id="offlineBanner" style="display: none; background: #dc2626; color: white; text-align: center; padding: 12px 18px; font-weight: 700; font-size: 0.95rem; border-bottom: 2px solid #b91c1c;">
+    ⚠️ You are offline. Limited features available. Reconnecting automatically when online...
   </div>
 
   <!-- Realtime Toast Notifications Container -->
@@ -236,7 +238,8 @@
       </div>
       
       <div class="user-status-bar">
-        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px;">
+        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <a href="downloads/app.apk" download="app.apk" class="btn btn-sm" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; font-weight: 700; border-radius: 6px; padding: 6px 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;" title="Download Android Web Wrapper APK">📥 Download App for Android</a>
           <span id="userBadgeRole" class="badge badge-admin">ADMIN</span>
           <span id="userNameDisplay" style="font-weight: 700; font-size: 0.95rem; color: var(--primary-dark);">Super Admin</span>
           <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
@@ -745,6 +748,25 @@
           <div class="form-group">
             <label>Volunteer Skills / Expertise</label>
             <input type="text" id="regSkills" class="form-control" placeholder="e.g. First Aid, Swimming, Boat Driving, Medical">
+          </div>
+        </div>
+
+        <!-- Home Location Setup (User & Volunteer 30km Alert Radius) -->
+        <div style="background: var(--bg-tertiary, #f8fafc); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); margin: 14px 0;">
+          <label style="font-weight: 700; color: var(--text-main); font-size: 0.9rem; display: block; margin-bottom: 6px;">📍 Set Home Location (30km Radius Alert System) *</label>
+          <div class="form-group" style="margin-bottom: 8px;">
+            <input type="text" id="regHomeAddress" class="form-control" placeholder="Home Address e.g. T. Nagar, Chennai" required>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 8px; font-weight: 600;" onclick="openLocationPicker('home')">
+            📍 Select Home Location on Interactive Map
+          </button>
+          <div class="grid-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <input type="number" step="any" id="regHomeLat" class="form-control" placeholder="Home Lat *" required value="13.0827">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <input type="number" step="any" id="regHomeLng" class="form-control" placeholder="Home Lon *" required value="80.2707">
+            </div>
           </div>
         </div>
 

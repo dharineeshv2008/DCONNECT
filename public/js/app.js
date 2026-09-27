@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNetworkListeners();
   initGeolocation();
   initSupabaseRealtime();
+  registerServiceWorker();
   restoreSession();
 
   // Requirement 8: Real-time 10s periodic polling fallback sync
@@ -239,6 +240,41 @@ function initNetworkListeners() {
   }
 }
 
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('📱 [Service Worker]: Active & registered on scope:', reg.scope);
+        })
+        .catch(err => {
+          console.warn('⚠️ [Service Worker]: Registration failed:', err);
+        });
+    });
+  }
+}
+
+async function registerDeviceToken() {
+  if (!currentUser || !currentUser.id) return;
+  try {
+    let token = localStorage.getItem('fcm_token');
+    if (!token) {
+      token = 'fcm_' + currentUser.id + '_' + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('fcm_token', token);
+    }
+    await fetchAPI('/users/device-token', {
+      method: 'POST',
+      body: {
+        userId: currentUser.id,
+        fcmToken: token,
+        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'web'
+      }
+    });
+  } catch (err) {
+    console.warn('⚠️ [Device Token]: Notice:', err.message);
+  }
+}
+
 function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
   console.error('API Error:', err);
   if (!navigator.onLine) {
@@ -424,6 +460,7 @@ function restoreSession() {
       }
       showDashboardApp();
       updateUserUI();
+      registerDeviceToken();
       loadDisasters();
     } catch (e) {
       localStorage.removeItem('dconnect_user');
@@ -544,6 +581,7 @@ async function handleLandingLogin(e) {
 
     showDashboardApp();
     updateUserUI();
+    registerDeviceToken();
     showToast('Welcome Back', `Logged in as ${currentUser.name}`, 'success');
 
     if (!currentUser.approved) {
@@ -572,7 +610,10 @@ async function handleRegister(e) {
     role: document.getElementById('regRole').value,
     organizationName: document.getElementById('regOrgName').value.trim() || null,
     organizationRegNo: document.getElementById('regOrgRegNo').value.trim() || null,
-    volunteerSkills: document.getElementById('regSkills').value.trim() || null
+    volunteerSkills: document.getElementById('regSkills').value.trim() || null,
+    homeAddress: document.getElementById('regHomeAddress')?.value.trim() || null,
+    homeLat: document.getElementById('regHomeLat')?.value ? parseFloat(document.getElementById('regHomeLat').value) : null,
+    homeLng: document.getElementById('regHomeLng')?.value ? parseFloat(document.getElementById('regHomeLng').value) : null
   };
 
   try {
@@ -1751,6 +1792,10 @@ function openLocationPicker(context = 'report') {
     const resLat = parseFloat(document.getElementById('resLatitude')?.value);
     const resLng = parseFloat(document.getElementById('resLongitude')?.value);
     if (!isNaN(resLat) && !isNaN(resLng)) { initLat = resLat; initLng = resLng; }
+  } else if (context === 'home') {
+    const hLat = parseFloat(document.getElementById('regHomeLat')?.value);
+    const hLng = parseFloat(document.getElementById('regHomeLng')?.value);
+    if (!isNaN(hLat) && !isNaN(hLng)) { initLat = hLat; initLng = hLng; }
   }
 
   selectedCoords = { lat: initLat, lng: initLng };
@@ -1831,6 +1876,12 @@ function confirmLocationPickerSelection() {
     if (document.getElementById('resLongitude')) document.getElementById('resLongitude').value = selectedCoords.lng.toFixed(6);
     if (document.getElementById('resAddress') && selectedAddress) {
       document.getElementById('resAddress').value = selectedAddress;
+    }
+  } else if (locationPickerContext === 'home') {
+    if (document.getElementById('regHomeLat')) document.getElementById('regHomeLat').value = selectedCoords.lat.toFixed(6);
+    if (document.getElementById('regHomeLng')) document.getElementById('regHomeLng').value = selectedCoords.lng.toFixed(6);
+    if (document.getElementById('regHomeAddress') && selectedAddress) {
+      document.getElementById('regHomeAddress').value = selectedAddress;
     }
   }
   closeModal('locationPickerModal');

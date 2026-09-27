@@ -358,7 +358,11 @@ module.exports = async (req, res) => {
         role: body.role || 'USER',
         status: initialStatus,
         organization_name: body.organizationName || null,
-        organization_reg_no: body.organizationRegNo || null
+        organization_reg_no: body.organizationRegNo || null,
+        home_lat: body.homeLat !== undefined ? body.homeLat : (body.home_lat !== undefined ? body.home_lat : null),
+        home_lng: body.homeLng !== undefined ? body.homeLng : (body.home_lng !== undefined ? body.home_lng : null),
+        home_address: body.homeAddress || body.home_address || null,
+        fcm_token: body.fcmToken || body.fcm_token || null
       });
 
       if (body.role === 'VOLUNTEER' && newUser) {
@@ -410,6 +414,39 @@ module.exports = async (req, res) => {
       const user = await supabaseDb.getUserById(id);
       if (!user) return sendJson(res, 404, { success: false, message: 'User not found' });
       return sendJson(res, 200, { success: true, data: user });
+    }
+
+    // 3.2 Device Token Registration (FCM / Web Push)
+    if (method === 'POST' && (pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token')) {
+      const caller = await getAuthUser(req);
+      const token = body.token || body.fcmToken || body.fcm_token;
+      const userId = caller ? caller.id : (body.userId || body.user_id || null);
+      if (!token) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'FCM device token is required.' });
+      }
+      await supabaseDb.saveUserDeviceToken(userId, token);
+      return sendJson(res, 200, { success: true, message: 'Device token registered successfully.', token });
+    }
+
+    // 3.3 Location-Based Nearby Alerts Check (30km Radius)
+    if ((method === 'POST' || method === 'GET') && (pathname === '/api/notifications/check-nearby-alerts' || pathname === '/api/disasters/nearby-alerts')) {
+      const lat = parseFloat(body.latitude || parsedUrl.query.lat || parsedUrl.query.latitude);
+      const lng = parseFloat(body.longitude || parsedUrl.query.lon || parsedUrl.query.lng || parsedUrl.query.longitude);
+      const radiusKm = parseFloat(body.radiusKm || parsedUrl.query.radius || 30.0);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid latitude and longitude coordinates are required.' });
+      }
+
+      const nearbyUsers = await supabaseDb.getUsersInRadius(lat, lng, radiusKm);
+      return sendJson(res, 200, {
+        success: true,
+        message: `Alert triggered for ${nearbyUsers.length} users within ${radiusKm}km radius.`,
+        radiusKm,
+        alertMessage: '🚨 Disaster near your location. Immediate attention required.',
+        nearbyUsersCount: nearbyUsers.length,
+        notifiedUsers: nearbyUsers.map(u => ({ id: u.id, name: u.name, phone: u.phone, home_address: u.home_address }))
+      });
     }
 
     // 4. Disasters & Incidents: List
