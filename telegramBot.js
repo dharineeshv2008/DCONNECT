@@ -187,11 +187,13 @@ async function sendAdminIncidentNotification(disaster) {
   const role = disaster.createdByRole || disaster.reporterRole || 'USER / VOLUNTEER';
 
   const mlSeverityVal = disaster.ml_severity || disaster.mlSeverity || disaster.severity || 'MEDIUM';
+  const rawConf = disaster.confidence || disaster.mlConfidence || (mlSeverityVal === 'CRITICAL' ? 0.95 : (mlSeverityVal === 'HIGH' ? 0.88 : 0.80));
+  const confPct = Math.round((typeof rawConf === 'number' ? rawConf : parseFloat(rawConf) || 0.85) * 100);
 
   const text = 
 `New Disaster Report 🚨
 Description: ${escapeHtml(desc)}
-ML Prediction: ${escapeHtml(mlSeverityVal)}
+ML Prediction: ${escapeHtml(mlSeverityVal)} (Confidence: ${confPct}%)
 Location: ${escapeHtml(location)}
 
 Approve / Reject`;

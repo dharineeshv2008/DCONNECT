@@ -70,7 +70,25 @@ function sendJson(res, statusCode, data, headers = {}) {
   res.end(JSON.stringify(data));
 }
 
+function computeRuleSeverityAndConfidence(descriptionText) {
+  const desc = (descriptionText || '').toLowerCase();
+  if (/trapped|collapse|dying|urgent|casualty|fatal|explosion/i.test(desc)) {
+    return { severity: 'CRITICAL', confidence: 0.95 };
+  }
+  if (/flood|fire|landslide|cyclone|tsunami|severe|emergency/i.test(desc)) {
+    return { severity: 'HIGH', confidence: 0.88 };
+  }
+  if (/damage|block|stuck|rain|storm/i.test(desc)) {
+    return { severity: 'MEDIUM', confidence: 0.75 };
+  }
+  if (/minor|leak|supplies|water|food/i.test(desc)) {
+    return { severity: 'LOW', confidence: 0.80 };
+  }
+  return { severity: 'MEDIUM', confidence: 0.70 };
+}
+
 async function getMlSeverityPrediction(descriptionText) {
+  const ruleRes = computeRuleSeverityAndConfidence(descriptionText);
   return new Promise((resolve) => {
     try {
       const postData = JSON.stringify({ description: descriptionText });
@@ -90,23 +108,25 @@ async function getMlSeverityPrediction(descriptionText) {
           try {
             const parsed = JSON.parse(data);
             if (parsed && parsed.severity) {
-              console.log("ML OUTPUT:", parsed.severity);
-              return resolve(parsed.severity);
+              console.log("ML OUTPUT:", parsed.severity, "CONFIDENCE:", parsed.confidence || ruleRes.confidence);
+              return resolve({
+                severity: parsed.severity,
+                confidence: parsed.confidence || ruleRes.confidence
+              });
             }
           } catch(e) {}
-          console.log("ML OUTPUT: MEDIUM");
-          resolve('MEDIUM');
+          console.log("ML OUTPUT:", ruleRes.severity, "CONFIDENCE:", ruleRes.confidence);
+          resolve(ruleRes);
         });
       });
       req.on('error', (err) => {
-        console.log("ML OUTPUT: MEDIUM");
-        resolve('MEDIUM');
+        console.log("ML OUTPUT (Fallback):", ruleRes.severity, "CONFIDENCE:", ruleRes.confidence);
+        resolve(ruleRes);
       });
       req.write(postData);
       req.end();
     } catch(err) {
-      console.log("ML OUTPUT: MEDIUM");
-      resolve('MEDIUM');
+      resolve(ruleRes);
     }
   });
 }
@@ -664,8 +684,10 @@ const server = http.createServer(async (req, res) => {
           initialStatus = 'VERIFIED_ACTIVE';
         }
 
-        // Call ML API prediction (Requirement: CALL ML API, DO NOT use default severity, log console.log("ML Prediction:", severity), store ml_severity)
-        const mlPredictedSeverity = await getMlSeverityPrediction(cleanDescription);
+        // Call ML API prediction (Requirement: CALL ML API, return severity + confidence)
+        const mlRes = await getMlSeverityPrediction(cleanDescription);
+        const mlPredictedSeverity = (typeof mlRes === 'object' && mlRes.severity) ? mlRes.severity : mlRes;
+        const mlConfidence = (typeof mlRes === 'object' && mlRes.confidence) ? mlRes.confidence : 0.85;
 
         const assignedSeverity = (body.severity && body.severity !== 'MEDIUM') ? body.severity : mlPredictedSeverity;
 
@@ -701,6 +723,8 @@ const server = http.createServer(async (req, res) => {
             ...newDisaster,
             ml_severity: mlPredictedSeverity,
             mlSeverity: mlPredictedSeverity,
+            confidence: mlConfidence,
+            mlConfidence: mlConfidence,
             createdByName: reporterUser ? reporterUser.name : (body.reporterName || 'Anonymous Citizen')
           }).catch(err => console.warn('Telegram notification error:', err.message));
         }

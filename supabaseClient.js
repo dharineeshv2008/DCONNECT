@@ -1004,7 +1004,7 @@ const supabaseDb = {
           .filter(u => {
             const r = String(u.role || '').trim().toUpperCase();
             const phone = String(u.phone || '').trim();
-            return !['ADMIN', 'SUPER_ADMIN'].includes(r) && phone !== '9598349738';
+            return !['ADMIN', 'SUPER_ADMIN'].includes(r) && phone !== '9598349738' && phone !== '9999999999';
           })
           .map(u => u.id);
 
