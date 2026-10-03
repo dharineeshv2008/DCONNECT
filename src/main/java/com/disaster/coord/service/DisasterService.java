@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import com.disaster.coord.event.DisasterCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,7 @@ public class DisasterService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final RateLimiterService rateLimiterService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${disaster-app.merge.max-distance-km:10.0}")
     private double maxMergeDistanceKm;
@@ -199,6 +202,17 @@ public class DisasterService {
                     "Citizen disaster report logged. Pending Admin verification before public broadcast.";
 
             log.info("NEW DISASTER CREATED: ID {} with initial status {}", targetDisaster.getId(), initialStatus);
+
+            // Publish domain event for real-time proximity FCM notifications (< 30km radius)
+            eventPublisher.publishEvent(new DisasterCreatedEvent(
+                    this,
+                    targetDisaster.getId(),
+                    targetDisaster.getLatitude(),
+                    targetDisaster.getLongitude(),
+                    targetDisaster.getType(),
+                    targetDisaster.getTitle(),
+                    targetDisaster.getLocationName()
+            ));
 
             if (initialStatus == DisasterStatus.VERIFIED_ACTIVE) {
                 notificationService.notifyAllVolunteers(

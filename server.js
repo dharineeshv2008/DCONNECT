@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const bcrypt = require('bcryptjs');
-const { supabaseDb } = require('./supabaseClient');
+const { supabase, supabaseDb } = require('./supabaseClient');
 const { initTelegramBot, handleTelegramWebhook, sendAdminIncidentNotification, sendAdminResourceNotification, syncTelegramMessageStatus } = require('./telegramBot');
 
 const PORT = process.env.PORT || 8000;
@@ -412,19 +412,33 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // FCM Device Token Registration Endpoint
-    if (method === 'POST' && (pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token')) {
+    // FCM Device Token Registration Endpoint (Save Token & Location)
+    if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token')) {
       const body = await parseBody(req);
       const caller = await getAuthUser(req);
-      const token = body.token || body.fcmToken || body.fcm_token;
+      const token = body.fcmToken || body.fcm_token || body.token;
       const userId = caller ? caller.id : (body.userId || body.user_id || null);
       if (!token) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'FCM device token is required.' });
       }
       if (userId) {
         await supabaseDb.saveUserDeviceToken(userId, token).catch(err => console.warn('Device token save notice:', err.message));
+        const updates = { fcm_token: token };
+        if (body.latitude !== undefined && body.latitude !== null && body.latitude !== '') {
+          const latVal = parseFloat(body.latitude);
+          if (!isNaN(latVal)) updates.home_lat = latVal;
+        }
+        if (body.longitude !== undefined && body.longitude !== null && body.longitude !== '') {
+          const lngVal = parseFloat(body.longitude);
+          if (!isNaN(lngVal)) updates.home_lng = lngVal;
+        }
+        try {
+          await supabase.from('users').update(updates).eq('id', userId);
+        } catch (e) {
+          console.warn('User location update notice:', e.message);
+        }
       }
-      return sendJson(res, 200, { success: true, message: 'FCM Device token registered successfully.', token });
+      return sendJson(res, 200, { success: true, message: 'FCM Device token and location registered successfully.', token });
     }
 
     // Notification History Endpoint (Pillar 4)

@@ -13,7 +13,8 @@ import java.time.ZonedDateTime;
 @Table(name = "users", indexes = {
     @Index(name = "idx_users_phone", columnList = "phone"),
     @Index(name = "idx_users_role_status", columnList = "role, status"),
-    @Index(name = "idx_users_session_token", columnList = "session_token")
+    @Index(name = "idx_users_session_token", columnList = "session_token"),
+    @Index(name = "idx_users_home_coords", columnList = "home_lat, home_lng")
 })
 @Getter
 @Setter
@@ -52,6 +53,15 @@ public class User {
 
     @Column(name = "organization_reg_no", length = 100)
     private String organizationRegNo;
+
+    @Column(name = "home_lat")
+    private Double homeLat;
+
+    @Column(name = "home_lng")
+    private Double homeLng;
+
+    @Column(name = "fcm_token", columnDefinition = "TEXT")
+    private String fcmToken;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

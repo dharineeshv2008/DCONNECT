@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.dconnect.app">
+
+    <!-- ========== PERMISSIONS ========== -->
+
+    <!-- Internet: Required for FCM token fetch, backend API calls, and disaster feed -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Push Notifications: Required for Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Location: For capturing GPS home_lat, home_lng to send with token -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Vibration: For notification vibration on disaster alerts -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Boot Receiver: Restart FCM listener after device reboot (optional) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="D-Connect"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.DConnect">
+
+        <!-- ========== MAIN ACTIVITY ========== -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep link intent from FCM notification tap -->
+            <intent-filter>
+                <action android:name="OPEN_DISASTER_ALERT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- ========== FCM MESSAGING SERVICE ========== -->
+        <!--
+            DConnectMessagingService handles:
+            1. FCM Token generation and refresh
+            2. Foreground push message display
+            3. Background push message handling
+        -->
+        <service
+            android:name=".fcm.DConnectMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- FCM notification channel icon and color (Android 8+) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification_disaster" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/fcm_notification_color" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="disaster_alerts_channel" />
+
+    </application>
+
+</manifest>

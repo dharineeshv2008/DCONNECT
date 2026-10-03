@@ -61,6 +61,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Firebase Admin SDK for Cloud Messaging (FCM) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.3.0</version>
+        </dependency>
+
         <!-- Spring Boot Starter Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- FCM notification LED/icon accent — red for disaster urgency -->
+    <color name="fcm_notification_color">#D32F2F</color>
+
+    <!-- App primary colors -->
+    <color name="primary">#1565C0</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="accent">#FF5252</color>
+    <color name="disaster_red">#D32F2F</color>
+    <color name="safe_green">#2E7D32</color>
+    <color name="warning_orange">#E65100</color>
+</resources>
