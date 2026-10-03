@@ -26,58 +26,22 @@
        SPLIT SCREEN LANDING & AUTHENTICATION (Matching Reference UI)
        ============================================================================== -->
   <div id="authLandingScreen" class="auth-hero-wrapper">
+    <!-- Continuous Unified Background & Atmosphere Layer -->
+    <div class="hero-unified-backdrop"></div>
+    <div class="hero-radar-grid"></div>
+    <div class="hero-ambient-glow glow-1"></div>
+    <div class="hero-ambient-glow glow-2"></div>
+    <div class="hero-ambient-glow glow-3"></div>
     
-    <!-- LEFT SIDE: Hero Visuals & Animated Helicopter -->
+    <!-- LEFT SIDE: Hero Visuals & Information -->
     <div class="auth-hero-left">
-      <div class="hero-backdrop-scenery"></div>
-      
-      <!-- Animated Rescue Helicopter Stage -->
-      <div class="helicopter-sky-stage">
-        <div class="rescue-helicopter">
-          <!-- Helicopter SVG Graphic with animated spinning rotors -->
-          <svg viewBox="0 0 180 90" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Main Rotor Blades -->
-            <g class="heli-main-rotor">
-              <line x1="10" y1="12" x2="160" y2="12" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
-              <line x1="30" y1="12" x2="140" y2="12" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
-              <circle cx="85" cy="12" r="4" fill="#0f172a" />
-            </g>
-            <rect x="83" y="12" width="4" height="10" fill="#334155" />
-
-            <!-- Helicopter Body -->
-            <path d="M45,46 Q50,22 90,22 L120,24 Q145,26 150,45 Q152,60 125,62 L60,62 Q45,60 45,46 Z" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
-            <!-- Red Emergency Stripe -->
-            <path d="M50,46 Q70,40 120,40 L145,46 L140,52 L55,52 Z" fill="#dc2626" />
-            <!-- Cockpit Windows -->
-            <path d="M115,28 Q138,30 142,44 L115,44 Z" fill="#38bdf8" opacity="0.85" stroke="#0f172a" stroke-width="1.5"/>
-            <path d="M85,26 L110,26 L110,44 L85,44 Z" fill="#0284c7" opacity="0.8" />
-
-            <!-- Tail Boom & Fin -->
-            <path d="M45,38 L15,42 L12,30 L6,30 L10,50 L18,46 L45,48 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>
-            <!-- Tail Rotor -->
-            <g class="heli-tail-rotor">
-              <line x1="5" y1="44" x2="25" y2="44" stroke="#ffffff" stroke-width="2.5" />
-              <circle cx="15" cy="44" r="2.5" fill="#dc2626" />
-            </g>
-
-            <!-- Landing Skids -->
-            <line x1="60" y1="62" x2="55" y2="72" stroke="#334155" stroke-width="2.5" />
-            <line x1="115" y1="62" x2="110" y2="72" stroke="#334155" stroke-width="2.5" />
-            <line x1="45" y1="72" x2="135" y2="72" stroke="#0f172a" stroke-width="3.5" stroke-linecap="round"/>
-          </svg>
-
-          <!-- Rescue Winch Wire & Hook -->
-          <div class="heli-rescue-wire">
-            <div class="heli-rescue-hook"></div>
-          </div>
-
-          <!-- Dynamic Searchlight Beam -->
-          <div class="heli-searchlight"></div>
-        </div>
-      </div>
 
       <!-- Hero Header & Branding -->
-      <div>
+      <div class="hero-content-wrapper">
+        <div class="hero-live-status-pill">
+          <span class="live-status-beacon"></span>
+          <span>OPERATIONAL LEVEL 1 &bull; LIVE COORDINATION ACTIVE</span>
+        </div>
         <div class="hero-header-tag">PEOPLE • RESPONSE • RESILIENCE</div>
         <h1 class="hero-main-title">
           Disaster<br>
@@ -142,13 +106,18 @@
 
         <!-- Brand Logo Header -->
         <div class="auth-card-brand">
+          <div class="auth-terminal-chip">
+            <span class="terminal-dot"></span>
+            <span>SECURE INCIDENT TERMINAL</span>
+          </div>
           <img src="assets/logo.png" alt="D-Connect Logo" class="auth-brand-logo">
           <h2 class="auth-brand-title">D-Connect</h2>
           <p class="auth-brand-tagline">Disaster Management Coordination App</p>
         </div>
 
-        <!-- Role Selector Tabs -->
+        <!-- Role Selector Tabs (iOS Liquid Glass Slider) -->
         <div class="role-tabs-bar" id="loginRoleTabs">
+          <div class="liquid-glass-indicator" id="liquidRoleSlider"></div>
           <button type="button" class="role-tab-item active" onclick="selectLoginRole('USER', this)">
             <span class="role-tab-icon">👤</span>
             <span>User</span>
@@ -169,6 +138,12 @@
             <span class="role-tab-icon">⚙️</span>
             <span>Admin</span>
           </button>
+        </div>
+
+        <!-- Dynamic Role Context Hint Badge -->
+        <div id="roleHintBadge" class="role-hint-badge">
+          <span id="roleHintIcon">👤</span>
+          <span id="roleHintText">Citizen Reporting & Public Safety Network</span>
         </div>
 
         <div id="landingLoginAlert"></div>
@@ -200,6 +175,11 @@
               autocomplete="new-password"
               oninput="handleLoginInputChange()"
               required>
+            <button type="button" class="password-toggle-btn" onclick="toggleLoginPasswordVisibility()" title="Toggle password visibility">
+              <span id="passwordVisibilityIcon" style="display:flex;align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </span>
+            </button>
           </div>
 
           <div id="loginInputHelper" class="input-hint-msg" style="display: none;"></div>
@@ -214,17 +194,24 @@
           New to D-Connect? <a href="#" onclick="openRegisterModal()">Register Now</a>
         </div>
 
-        <!-- Mobile-Friendly APK Download CTA Card -->
-        <div class="landing-apk-download-box" style="margin-top: 18px; padding: 14px 16px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; text-align: center; backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-          <div style="font-size: 0.8rem; font-weight: 700; color: #a7f3d0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-            <span>📱</span> <span>D-Connect Mobile App for Android</span>
+        <!-- Mobile-Friendly APK Download CTA Card (Modern Tactical Glassmorphism) -->
+        <div class="landing-apk-download-box">
+          <div class="apk-download-top-glow"></div>
+          
+          <div class="apk-card-header">
+            <span class="apk-live-beacon"></span>
+            <span class="apk-header-title">OFFICIAL ANDROID APP &bull; DIRECT APK</span>
           </div>
-          <a href="downloads/app.apk" download="app-release.apk" class="btn-download-app-link" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 16px; background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; font-weight: 700; font-size: 0.92rem; border-radius: 8px; text-decoration: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transition: transform 0.15s ease, box-shadow 0.15s ease;">
-            <span style="font-size: 1.1rem;">📥</span>
-            <span>Download Android App (.apk)</span>
+
+          <a href="downloads/app.apk" download="app-release.apk" class="btn-download-app-link">
+            <span class="btn-download-icon-box">📥</span>
+            <span class="btn-download-label">Download Android App (.apk)</span>
           </a>
-          <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 8px;">
-            Android 8.0+ Compatible &bull; Fast Emergency Offline Mode
+
+          <div class="apk-specs-row">
+            <span class="apk-spec-chip">⚡ Fast Offline Mode</span>
+            <span class="apk-spec-chip">🛡️ Verified Secure APK</span>
+            <span class="apk-spec-chip">Android 8.0+</span>
           </div>
         </div>
 
@@ -925,8 +912,12 @@
     <div class="modal-content" style="max-width: 650px; width: 95%;">
       <div class="card-header">
         <h3 class="card-title">📍 Select Incident Location</h3>
-        <button class="btn btn-outline btn-sm" onclick="closeModal('locationPickerModal')">✕</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="openModal('gpsPermissionModal')" title="GPS Help">📍 GPS Help</button>
+          <button class="btn btn-outline btn-sm" onclick="closeModal('locationPickerModal')">✕</button>
+        </div>
       </div>
+      <div id="locationPickerFallbackBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px;"></div>
       <p style="color: var(--text-secondary); margin: 8px 0 12px 0; font-size: 0.88rem;">
         Click anywhere on the map or drag the marker to specify exact incident coordinates.
       </p>
@@ -938,6 +929,38 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-outline" onclick="closeModal('locationPickerModal')">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="confirmLocationPickerSelection()">Confirm Location</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GPS Permission Help Modal -->
+  <div id="gpsPermissionModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 500px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">📍 Enabling Location Permissions</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('gpsPermissionModal')">✕</button>
+      </div>
+      <div style="font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); margin-bottom: 16px;">
+        <p><strong>On Android (Chrome):</strong></p>
+        <ol style="margin-left: 20px; margin-bottom: 10px;">
+          <li>Tap the 🔒 lock or settings icon in the address bar.</li>
+          <li>Tap <strong>Permissions</strong> → <strong>Location</strong>.</li>
+          <li>Select <strong>Allow</strong>.</li>
+        </ol>
+        <p><strong>On iOS (Safari):</strong></p>
+        <ol style="margin-left: 20px; margin-bottom: 10px;">
+          <li>Open iPhone <strong>Settings</strong> → <strong>Safari</strong> → <strong>Location</strong>.</li>
+          <li>Select <strong>Ask</strong> or <strong>Allow</strong>.</li>
+        </ol>
+        <p><strong>On Desktop:</strong></p>
+        <ol style="margin-left: 20px;">
+          <li>Click the site security icon in the URL bar.</li>
+          <li>Set <strong>Location</strong> to <strong>Allow</strong> and refresh.</li>
+        </ol>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('gpsPermissionModal')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('gpsPermissionModal'); captureBrowserLocation();">🔄 Retry GPS Fix</button>
       </div>
     </div>
   </div>
@@ -1153,6 +1176,7 @@
 
   <!-- Supabase JS SDK (Version 2) for Realtime Subscriptions -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script src="js/app.js"></script>
 </body>
 </html>

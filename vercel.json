@@ -6,15 +6,36 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/download/(.*)",
+      "destination": "/downloads/$1"
+    },
+    {
       "source": "/",
       "destination": "/index.html"
     },
     {
-      "source": "/((?!api/|assets/|css/|js/|favicon|background).*)",
+      "source": "/((?!api/|assets/|css/|js/|downloads?/|favicon|background).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/downloads/(.*)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"dconnect.apk\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

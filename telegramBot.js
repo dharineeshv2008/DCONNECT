@@ -12,6 +12,18 @@ let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TE
 let pollingInterval = null;
 let lastUpdateId = 0;
 const incidentTelegramMessages = new Map();
+const handledCallbackIds = new Set();
+
+function getTelegramBotHealth() {
+  return {
+    status: 'UP',
+    botConnected: true,
+    mode: pollingInterval ? 'POLLING' : 'WEBHOOK',
+    lastUpdateId: lastUpdateId,
+    uptimeSeconds: Math.floor(process.uptime()),
+    adminChatIdConfigured: Boolean(getAdminChatId())
+  };
+}
 
 function getAdminChatId() {
   return process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || '6868121119';
@@ -222,6 +234,16 @@ Approve / Reject`;
         originalText: text
       });
     }
+
+    // Persist ML prediction audit record (Pillars 5 & 6)
+    supabaseDb.saveMlPrediction({
+      disasterId: disaster.id,
+      predictedSeverity: mlSeverityVal,
+      confidence: confPct / 100,
+      modelVersion: 'v1.0-tfidf-classifier',
+      description: desc
+    }).catch(e => console.warn('ML prediction audit notice:', e.message));
+
     return result;
   } catch (err) {
     console.error(`❌ [Telegram Bot]: Failed to send incident #${disaster.id} notification:`, err.message);
@@ -320,7 +342,7 @@ async function processTelegramUpdate(body) {
     const configuredAdminChatId = getAdminChatId();
     const matchesAdmin = [chatId, fromId, message.chat?.id].some(id => id && String(id) === String(configuredAdminChatId));
 
-    if (configuredAdminChatId && !matchesAdmin && (process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID)) {
+    if (configuredAdminChatId && !matchesAdmin) {
       console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} / from_id ${fromId} (Expected: ${configuredAdminChatId})`);
       await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
       return { success: true, ignored: true, message: 'Unauthorized callback query ignored' };
@@ -360,6 +382,32 @@ async function processTelegramUpdate(body) {
       return { success: false, error: 'Bad Request', message: 'Invalid callback data format' };
     }
 
+    // Idempotency check: prevent duplicate callback execution
+    const idempotencyKey = `${callbackId || 'cb'}:${targetId}`;
+    if (callbackId && handledCallbackIds.has(idempotencyKey)) {
+      await answerCallbackQuery(callbackId, 'Action was already processed.');
+      return { success: true, message: 'Action already processed (idempotent)', alreadyProcessed: true };
+    }
+    if (callbackId) handledCallbackIds.add(idempotencyKey);
+
+    // Check if incident was already verified / cancelled
+    if (targetType === 'INCIDENT') {
+      const existing = await supabaseDb.getDisasterById(targetId).catch(() => null);
+      if (existing && (existing.status === 'VERIFIED_ACTIVE' || existing.status === 'CANCELLED_BY_ADMIN' || existing.status === 'CLOSED')) {
+        const alreadyBadge = (existing.status === 'VERIFIED_ACTIVE') ? '✅ ALREADY APPROVED' : '❌ ALREADY REJECTED';
+        if (chatId && messageId) {
+          await editMessageStatus(chatId, messageId, originalText, alreadyBadge);
+        }
+        await answerCallbackQuery(callbackId, `Incident #${targetId} already ${existing.status}`);
+        return {
+          success: true,
+          message: `Incident #${targetId} was already processed (${existing.status})`,
+          alreadyProcessed: true,
+          updatedStatus: existing.status
+        };
+      }
+    }
+
     const targetStatus = action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CANCELLED_BY_ADMIN';
     console.log("Telegram approval received: " + action + " for incident #" + targetId);
 
@@ -390,6 +438,18 @@ async function processTelegramUpdate(body) {
       // Edit message text and remove inline buttons to prevent duplicate clicks
       if (chatId && messageId) {
         await editMessageStatus(chatId, messageId, originalText, statusBadge);
+      }
+
+      // Auto-trigger FCM radius notifications for approved incident (Pillars 4 & 5)
+      if (action === 'APPROVED' && targetType === 'INCIDENT' && global.sendRadiusAlerts && updatedRecord) {
+        global.sendRadiusAlerts({
+          disasterId: targetId,
+          latitude: updatedRecord.latitude,
+          longitude: updatedRecord.longitude,
+          severity: updatedRecord.severity,
+          title: updatedRecord.title,
+          radiusKm: 30
+        }).catch(err => console.warn('Radius alert auto-dispatch notice:', err.message));
       }
 
       console.log(`✅ [Telegram Bot]: ${targetType} #${targetId} verified & updated to ${targetStatus}`);
@@ -531,5 +591,6 @@ module.exports = {
   processTelegramUpdate,
   setAdminChatId,
   getAdminChatId,
+  getTelegramBotHealth,
   callTelegramApi
 };

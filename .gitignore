@@ -28,5 +28,13 @@ android-sdk/
 apk_build/
 tools/
 classpath_argfile.txt
-*.py
+*.pyc
+*.pyo
+
+# Scratch & Design experiments
+stitch_modern_saas_login_page_redesign/
+public/assets/helicopter.glb
+public/js/helicopter3d/
+src/main/resources/static/assets/helicopter.glb
+src/main/resources/static/js/helicopter3d/
 

@@ -23,22 +23,97 @@ function calculateDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, headers = {}) {
+  const correlationHeaders = res.req?.correlationId ? { 'X-Correlation-ID': res.req.correlationId } : {};
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, apikey'
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, X-Correlation-ID, X-Offline-Mode, X-Forwarded-Proto, apikey',
+    ...correlationHeaders,
+    ...headers
   });
+  if (data && typeof data === 'object' && !data.correlationId && res.req?.correlationId) {
+    data.correlationId = res.req.correlationId;
+  }
   res.end(JSON.stringify(data));
 }
+
+function parseCookieToken(cookieHeader) {
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(';');
+  for (const part of parts) {
+    const [name, val] = part.trim().split('=');
+    if (['token', 'auth_token', 'access_token'].includes(name.toLowerCase())) {
+      return decodeURIComponent(val || '').trim();
+    }
+  }
+  return null;
+}
+
+function hasAdminPrivileges(user) {
+  if (!user) return false;
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'];
+  if (typeof user.role === 'string' && allowed.includes(user.role.trim().toUpperCase())) {
+    return true;
+  }
+  if (Array.isArray(user.roles)) {
+    return user.roles.some(r => typeof r === 'string' && allowed.includes(r.trim().toUpperCase()));
+  }
+  return false;
+}
+
+function logForbiddenAttempt(req, reason, caller = null) {
+  const authHeader = req.headers['authorization'] || req.headers['x-auth-token'] || req.headers['cookie'] || 'NONE';
+  const maskedToken = authHeader.length > 12 ? (authHeader.substring(0, 8) + '...' + authHeader.slice(-4)) : authHeader;
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+  console.warn(`[AUTH 403] [CorrelationID: ${req.correlationId}] Path: ${req.url} Method: ${req.method} IP: ${ip} Token: ${maskedToken} UserID: ${caller?.id || 'ANON'} Role: ${caller?.role || 'NONE'} Reason: ${reason}`);
+}
+
+async function sendRadiusAlerts({ disasterId, latitude, longitude, severity, title, radiusKm = 30.0 }) {
+  const dLat = parseFloat(latitude);
+  const dLng = parseFloat(longitude);
+  if (isNaN(dLat) || isNaN(dLng)) {
+    return { radiusKm, notifiedUsersCount: 0, notifiedUsers: [] };
+  }
+
+  const nearbyUsers = await supabaseDb.getUsersInRadius(dLat, dLng, radiusKm).catch(() => []);
+  const notified = [];
+
+  for (const u of (nearbyUsers || [])) {
+    const isRecent = await supabaseDb.wasNotificationSentRecently(u.id, disasterId, 60);
+    if (!isRecent) {
+      await supabaseDb.recordSentNotification(u.id, disasterId, calculateDistanceKm(dLat, dLng, u.home_lat, u.home_lng));
+      notified.push({
+        id: u.id,
+        name: u.name,
+        phone: u.phone,
+        distanceKm: Math.round(calculateDistanceKm(dLat, dLng, u.home_lat, u.home_lng) * 10) / 10
+      });
+    }
+  }
+
+  console.log(`📡 Radius alert dispatched: ${notified.length} users notified within ${radiusKm}km of disaster #${disasterId}`);
+  return {
+    disasterId,
+    radiusKm,
+    notifiedUsersCount: notified.length,
+    notifiedUsers: notified
+  };
+}
+global.sendRadiusAlerts = sendRadiusAlerts;
 
 const userSessions = new Map();
 
 async function getAuthUser(req) {
+  let token = null;
   const authHeader = req.headers['authorization'] || req.headers['x-auth-token'] || req.headers['x-access-token'];
-  if (!authHeader) return null;
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (authHeader) {
+    token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  }
+  if (!token && req.headers['cookie']) {
+    token = parseCookieToken(req.headers['cookie']);
+  }
   if (!token) return null;
 
   if (userSessions.has(token)) {
@@ -76,10 +151,7 @@ async function getAuthUser(req) {
   if (token.toLowerCase().includes('admin') || token.toLowerCase().includes('super')) {
     try {
       const users = await supabaseDb.getAllUsers();
-      const admin = users.find(u => {
-        const r = String(u.role).toUpperCase();
-        return r === 'ADMIN' || r === 'SUPER_ADMIN';
-      });
+      const admin = users.find(u => hasAdminPrivileges(u));
       if (admin) {
         userSessions.set(token, admin);
         return admin;
@@ -93,8 +165,8 @@ async function getAuthUser(req) {
       const parts = token.split('.');
       if (parts.length === 3) {
         const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-        if (payload.id || payload.user_id) {
-          const u = await supabaseDb.getUserById(payload.id || payload.user_id);
+        if (payload.id || payload.user_id || payload.sub) {
+          const u = await supabaseDb.getUserById(parseInt(payload.id || payload.user_id || payload.sub));
           if (u) {
             userSessions.set(token, u);
             return u;
@@ -107,12 +179,9 @@ async function getAuthUser(req) {
             return u;
           }
         }
-        if (payload.role === 'ADMIN' || payload.role === 'SUPER_ADMIN') {
+        if (payload.role && ['ADMIN', 'SUPER_ADMIN'].includes(String(payload.role).toUpperCase())) {
           const users = await supabaseDb.getAllUsers();
-          const admin = users.find(u => {
-            const r = String(u.role).toUpperCase();
-            return r === 'ADMIN' || r === 'SUPER_ADMIN';
-          });
+          const admin = users.find(u => hasAdminPrivileges(u));
           if (admin) {
             userSessions.set(token, admin);
             return admin;
@@ -128,11 +197,18 @@ async function getAuthUser(req) {
 module.exports = async (req, res) => {
   const method = req.method;
 
+  // Correlation ID Middleware (Pillar 1)
+  const correlationId = req.headers['x-correlation-id'] || req.headers['x-request-id'] || ('corr_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
+  req.correlationId = correlationId;
+  res.req = req;
+  res.setHeader('X-Correlation-ID', correlationId);
+
   if (method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, apikey'
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, X-Correlation-ID, X-Offline-Mode, X-Forwarded-Proto, apikey',
+      'X-Correlation-ID': correlationId
     });
     res.end();
     return;
@@ -239,6 +315,56 @@ module.exports = async (req, res) => {
     // Telegram Webhook Endpoint
     if (pathname === '/api/telegram/webhook') {
       return handleTelegramWebhook(req, res);
+    }
+
+    // Telegram Bot Health Check Endpoint (Pillar 5)
+    if (method === 'GET' && (pathname === '/api/bot/health' || pathname === '/api/telegram/health' || pathname === '/bot/health')) {
+      const { getTelegramBotHealth } = require('../telegramBot');
+      return sendJson(res, 200, {
+        success: true,
+        ...getTelegramBotHealth()
+      });
+    }
+
+    // Admin Broadcast Alerts Endpoint (Pillar 4)
+    if (method === 'POST' && (pathname === '/api/notifications/broadcast' || pathname === '/api/notifications/send-radius-alert')) {
+      const caller = await getAuthUser(req);
+      if (!caller || !hasAdminPrivileges(caller)) {
+        logForbiddenAttempt(req, 'Admin privileges required to broadcast notifications', caller);
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Admin privileges required to broadcast alerts.', correlationId: req.correlationId });
+      }
+
+      const disasterId = parseInt(body.disasterId || body.id) || null;
+      let lat = parseFloat(body.latitude || body.lat);
+      let lng = parseFloat(body.longitude || body.lng);
+
+      if ((isNaN(lat) || isNaN(lng)) && disasterId) {
+        const d = await supabaseDb.getDisasterById(disasterId).catch(() => null);
+        if (d) {
+          lat = parseFloat(d.latitude);
+          lng = parseFloat(d.longitude);
+        }
+      }
+
+      if (isNaN(lat) || isNaN(lng)) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid disaster latitude and longitude are required.' });
+      }
+
+      const radiusKm = parseFloat(body.radiusKm || body.radius || 30.0);
+      const resData = await sendRadiusAlerts({
+        disasterId,
+        latitude: lat,
+        longitude: lng,
+        severity: body.severity || 'HIGH',
+        title: body.title || 'Emergency Disaster Alert',
+        radiusKm
+      });
+
+      return sendJson(res, 200, {
+        success: true,
+        message: `Broadcast sent to ${resData.notifiedUsersCount} users within ${radiusKm}km.`,
+        ...resData
+      });
     }
 
     // Predict / ML endpoint
@@ -428,6 +554,13 @@ module.exports = async (req, res) => {
       return sendJson(res, 200, { success: true, message: 'Device token registered successfully.', token });
     }
 
+    // 3.2.1 Notifications History Endpoint
+    if (method === 'GET' && (pathname === '/api/notifications' || pathname === '/api/notifications/history')) {
+      const userId = parsedUrl.query.userId || parsedUrl.query.user_id;
+      const list = await supabaseDb.getUserNotifications(userId);
+      return sendJson(res, 200, { success: true, count: list.length, data: list });
+    }
+
     // 3.3 Location-Based Nearby Alerts Check (30km Radius)
     if ((method === 'POST' || method === 'GET') && (pathname === '/api/notifications/check-nearby-alerts' || pathname === '/api/disasters/nearby-alerts')) {
       const lat = parseFloat(body.latitude || parsedUrl.query.lat || parsedUrl.query.latitude);
@@ -487,6 +620,11 @@ module.exports = async (req, res) => {
     if (method === 'POST' && (pathname === '/api/disasters/report' || pathname === '/api/incidents/report' || pathname === '/api/reports' || pathname === '/api/incidents/create')) {
       const userLat = parseFloat(body.latitude);
       const userLon = parseFloat(body.longitude);
+
+      if (isNaN(userLat) || isNaN(userLon) || userLat < -90 || userLat > 90 || userLon < -180 || userLon > 180) {
+        return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'Valid coordinates are required (latitude between -90 and 90, longitude between -180 and 180).' });
+      }
+
       const type = body.type || 'FLOOD';
 
       let validUserId = null;
@@ -851,12 +989,46 @@ module.exports = async (req, res) => {
     // 11. Admin Analytics & Approvals
     if (pathname.startsWith('/api/admin/')) {
       const caller = await getAuthUser(req);
-      const roleUpper = caller ? String(caller.role).trim().toUpperCase() : '';
       if (!caller) {
-        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+        logForbiddenAttempt(req, 'Missing or unresolvable authentication token', null);
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.', correlationId: req.correlationId });
       }
-      if (!['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(roleUpper)) {
-        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.' });
+      if (!hasAdminPrivileges(caller)) {
+        logForbiddenAttempt(req, `User role '${caller.role || (caller.roles ? caller.roles.join(',') : 'NONE')}' is not authorized for Admin endpoints`, caller);
+        return sendJson(res, 403, { success: false, error: 'Forbidden', message: 'Access Denied. Admin privileges required.', correlationId: req.correlationId });
+      }
+
+      // Supervised Database Cleanup Tool (Pillar 8)
+      if (method === 'POST' && pathname === '/api/admin/cleanup') {
+        if (body.confirmationPhrase !== 'CONFIRM_CLEANUP_DEV_STAGING') {
+          return sendJson(res, 400, {
+            success: false,
+            error: 'Bad Request',
+            message: 'Invalid or missing confirmation phrase. Required: "CONFIRM_CLEANUP_DEV_STAGING".'
+          });
+        }
+
+        if (body.dryRun === true) {
+          const counts = await supabaseDb.getDryRunCleanupCounts();
+          return sendJson(res, 200, {
+            success: true,
+            dryRun: true,
+            message: 'Dry run completed. No data was deleted.',
+            confirmationPhrase: 'CONFIRM_CLEANUP_DEV_STAGING',
+            tablesToClean: Object.keys(counts),
+            recordCounts: counts
+          });
+        }
+
+        // Live cleanup execution
+        console.log(`[CLEANUP] Live DB cleanup triggered by Admin (${caller.name || caller.phone})`);
+        await supabaseDb.resetSystemData();
+        return sendJson(res, 200, {
+          success: true,
+          dryRun: false,
+          message: 'Database cleanup executed successfully. Non-admin records pruned.',
+          confirmationPhrase: 'CONFIRM_CLEANUP_DEV_STAGING'
+        });
       }
     }
 
@@ -898,8 +1070,26 @@ module.exports = async (req, res) => {
 
     if (method === 'POST' && (pathname === '/api/admin/approve-disaster' || pathname === '/api/admin/approve_disaster')) {
       const actionStatus = body.action === 'APPROVED' ? 'VERIFIED_ACTIVE' : 'CLOSED';
-      const updated = await supabaseDb.updateDisaster(body.disasterId, { status: actionStatus });
-      return sendJson(res, 200, { success: true, message: `Disaster ${body.action.toLowerCase()}`, data: updated });
+      const dId = parseInt(body.disasterId || body.id);
+      const updated = await supabaseDb.updateDisaster(dId, { status: actionStatus });
+
+      if (actionStatus === 'VERIFIED_ACTIVE' && updated) {
+        sendRadiusAlerts({
+          disasterId: dId,
+          latitude: updated.latitude,
+          longitude: updated.longitude,
+          severity: updated.severity,
+          title: updated.title,
+          radiusKm: 30
+        }).catch(err => console.warn('Radius alert notice on admin approve:', err.message));
+      }
+
+      return sendJson(res, 200, {
+        success: true,
+        message: `Disaster ${body.action ? body.action.toLowerCase() : 'approved'}`,
+        updatedStatus: actionStatus,
+        data: updated
+      });
     }
 
     if (method === 'POST' && (pathname === '/api/admin/reject-disaster' || pathname === '/api/admin/reject_disaster')) {

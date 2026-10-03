@@ -1,0 +1,23 @@
+[Unit]
+Description=D-Connect Disaster Coordination Node & ML Watchdog
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/www/dconnect
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=dconnect
+
+# Security Sandboxing Limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
