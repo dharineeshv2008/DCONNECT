@@ -3,7 +3,7 @@
   "passed": 76,
   "failed": 0,
   "pass_rate_pct": 100.0,
-  "timestamp": "2026-10-03T14:01:35Z",
+  "timestamp": "2026-10-03T14:51:33Z",
   "results": [
     {
       "id": 1,
@@ -519,7 +519,7 @@
     {
       "id": 74,
       "pillar": "PILLAR_10_E2E",
-      "name": "Core disaster feed responds within performance budget (latency: 173.54ms < 250ms)",
+      "name": "Core disaster feed responds within performance budget (latency: 248.0ms < 250ms)",
       "status": "PASS",
       "details": ""
     },
