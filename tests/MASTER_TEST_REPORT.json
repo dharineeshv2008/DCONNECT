@@ -1,0 +1,541 @@
+{
+  "total_tests": 76,
+  "passed": 76,
+  "failed": 0,
+  "pass_rate_pct": 100.0,
+  "timestamp": "2026-10-03T14:01:35Z",
+  "results": [
+    {
+      "id": 1,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Admin authentication returns HTTP 200 and token",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 2,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Response includes X-Correlation-ID trace header",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 3,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Standard citizen login returns HTTP 200 with role USER",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 4,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Admin endpoint accepts cookie auth token",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 5,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Admin endpoint accepts Bearer authorization token",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 6,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Unauthenticated admin request blocked with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 7,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Citizen account blocked from admin queue with HTTP 403",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 8,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Malformed token rejected with HTTP 403 and access denied",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 9,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "403 Forbidden payload contains correlationId field",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 10,
+      "pillar": "PILLAR_1_RBAC",
+      "name": "Tolerant role check recognizes SUPER_ADMIN privileges",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 11,
+      "pillar": "PILLAR_2_APK",
+      "name": "HEAD /download/app.apk returns HTTP 200 with Content-Length > 5MB",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 12,
+      "pillar": "PILLAR_2_APK",
+      "name": "APK Content-Type is application/vnd.android.package-archive",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 13,
+      "pillar": "PILLAR_2_APK",
+      "name": "HEAD /downloads/app-release.apk returns HTTP 200",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 14,
+      "pillar": "PILLAR_2_APK",
+      "name": "HEAD /download/dconnect.apk returns HTTP 200",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 15,
+      "pillar": "PILLAR_2_APK",
+      "name": "Release APK binary exists on disk with size > 5MB",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 16,
+      "pillar": "PILLAR_2_APK",
+      "name": "High-res PWA & mobile app icons generated (192px and 512px)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 17,
+      "pillar": "PILLAR_2_APK",
+      "name": "APK contains valid ZIP / APK magic header (PK\\x03\\x04)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 18,
+      "pillar": "PILLAR_2_APK",
+      "name": "APK binary synced to Java Spring Boot static resources directory",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 19,
+      "pillar": "PILLAR_3_GPS",
+      "name": "Incident report accepts 7-decimal high-precision GPS coordinates",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 20,
+      "pillar": "PILLAR_3_GPS",
+      "name": "Database stores latitude and longitude with numeric float accuracy",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 21,
+      "pillar": "PILLAR_3_GPS",
+      "name": "API rejects latitude outside [-90, +90] range",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 22,
+      "pillar": "PILLAR_3_GPS",
+      "name": "API rejects longitude outside [-180, +180] range",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 23,
+      "pillar": "PILLAR_3_GPS",
+      "name": "public/index.html includes locationPickerFallbackBanner element",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 24,
+      "pillar": "PILLAR_3_GPS",
+      "name": "public/index.html includes gpsPermissionModal for user guidance",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 25,
+      "pillar": "PILLAR_3_GPS",
+      "name": "public/js/app.js implements enableHighAccuracy and fallback banner handling",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 26,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Register FCM device token returns HTTP 200",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 27,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Disasters feed calculates distanceKm relative to user coordinates",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 28,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Emergency resources endpoint supports 20km radius filtering",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 29,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Admin broadcast endpoint blocks non-admin accounts (HTTP 403)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 30,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Admin broadcast notification successfully executes (HTTP 200)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 31,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Notification engine executes with deduplication window check",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 32,
+      "pillar": "PILLAR_4_FCM",
+      "name": "scripts/db_cleanup.sql schema tracks sent_notifications table",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 33,
+      "pillar": "PILLAR_4_FCM",
+      "name": "Notification history endpoint returns list of alerts",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 34,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "GET /bot/health returns HTTP 200 with status UP",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 35,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "GET /api/telegram/health returns uptime and configured status",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 36,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Incident report generated in PENDING_VERIFICATION for Telegram review",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 37,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Telegram approval callback returns HTTP 200",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 38,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Database incident status transitioned to VERIFIED_ACTIVE after Telegram approval",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 39,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Duplicate callback query handled idempotently without error",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 40,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Telegram rejection callback returns HTTP 200",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 41,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Database incident status transitioned to CANCELLED_BY_ADMIN",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 42,
+      "pillar": "PILLAR_5_TELEGRAM",
+      "name": "Unauthorized callback queries safely rejected / ignored",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 43,
+      "pillar": "PILLAR_6_ML",
+      "name": "FastAPI ML Service online at port 8000",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 44,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'people trapped in burning building' -> CRITICAL",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 45,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'multiple casualties fatal collapse dying' -> CRITICAL",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 46,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'people affected by fire outbreak' -> HIGH",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 47,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'tree fallen blocking road' -> MEDIUM",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 48,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'minor issue reported' -> LOW",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 49,
+      "pillar": "PILLAR_6_ML",
+      "name": "ML Predict: 'small kitchen fire put out quickly' -> LOW",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 50,
+      "pillar": "PILLAR_6_ML",
+      "name": "Main server proxies /predict to ML microservice successfully",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 51,
+      "pillar": "PILLAR_6_ML",
+      "name": "Main server proxies /api/predict to ML microservice successfully",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 52,
+      "pillar": "PILLAR_6_ML",
+      "name": "Database tracks ml_predictions schema for prediction audit logs",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 53,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Incident created in initial PENDING_VERIFICATION state",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 54,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Admin incident edit endpoint /api/incidents/:id/update succeeds",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 55,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Admin approval transitions incident to VERIFIED_ACTIVE",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 56,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Admin creates and assigns volunteer task mission (HTTP 201)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 57,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Volunteer updates mission status to IN_PROGRESS",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 58,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Volunteer completes mission -> status COMPLETED",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 59,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Incident transitions to RESOLVED",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 60,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Incident transitions to CLOSED",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 61,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Modifying a CLOSED incident is strictly blocked (HTTP 400)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 62,
+      "pillar": "PILLAR_7_ADMIN",
+      "name": "Admin Analytics provides activeDisasters, pendingDisasters, volunteersCount",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 63,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "POST /api/admin/cleanup without token blocked (HTTP 403)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 64,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "POST /api/admin/cleanup blocked for non-admin accounts (HTTP 403)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 65,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "Rejection of cleanup without exact confirmation phrase (HTTP 400)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 66,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "Cleanup dryRun: true returns accurate record counts across all tables",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 67,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "scripts/db_cleanup.sql exists with idempotent DDL and safe pruning logic",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 68,
+      "pillar": "PILLAR_8_CLEANUP",
+      "name": "Admin account remains active and preserved after cleanup procedures",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 69,
+      "pillar": "PILLAR_9_OPS",
+      "name": "health_monitor.js watchdog file exists in repository root",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 70,
+      "pillar": "PILLAR_9_OPS",
+      "name": "health_monitor.js --once probe executes cleanly with code 0",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 71,
+      "pillar": "PILLAR_9_OPS",
+      "name": "ecosystem.config.js exists for PM2 production process supervision",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 72,
+      "pillar": "PILLAR_9_OPS",
+      "name": "dconnect.service systemd unit configuration file exists for Linux hosts",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 73,
+      "pillar": "PILLAR_9_OPS",
+      "name": "API health/config probe returns HTTP 200 with active service status",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 74,
+      "pillar": "PILLAR_10_E2E",
+      "name": "Core disaster feed responds within performance budget (latency: 173.54ms < 250ms)",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 75,
+      "pillar": "PILLAR_10_E2E",
+      "name": "API pagination parameters enforce max result window",
+      "status": "PASS",
+      "details": ""
+    },
+    {
+      "id": 76,
+      "pillar": "PILLAR_10_E2E",
+      "name": "Single source of truth: Supabase PostgreSQL connected and serving canonical data",
+      "status": "PASS",
+      "details": ""
+    }
+  ]
+}

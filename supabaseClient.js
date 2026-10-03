@@ -38,10 +38,7 @@ function normalizeDisasterStatus(status) {
 }
 
 function dbStatusForDisaster(status) {
-  const norm = normalizeDisasterStatus(status);
-  if (norm === 'PENDING_VERIFICATION') return 'PENDING';
-  if (norm === 'CANCELLED_BY_ADMIN') return 'CLOSED';
-  return norm;
+  return normalizeDisasterStatus(status);
 }
 
 function sanitizeResourceStatus(input) {
@@ -175,6 +172,128 @@ const supabaseDb = {
       }
       return false;
     });
+  },
+
+  // --- SENT NOTIFICATIONS & DEDUPLICATION (Pillar 4) ---
+  sentNotificationsMemory: new Map(),
+
+  async recordSentNotification(userId, disasterId, distanceKm = 0) {
+    const key = `${userId}_${disasterId}`;
+    this.sentNotificationsMemory.set(key, Date.now());
+
+    try {
+      await supabase.from('sent_notifications').insert([{
+        user_id: userId,
+        disaster_id: disasterId,
+        distance_km: distanceKm,
+        sent_at: new Date().toISOString()
+      }]);
+    } catch (e) {
+      // In-memory fallback handles deduplication if table not created
+    }
+    return true;
+  },
+
+  async wasNotificationSentRecently(userId, disasterId, windowMinutes = 60) {
+    const key = `${userId}_${disasterId}`;
+    const lastSent = this.sentNotificationsMemory.get(key);
+    const windowMs = windowMinutes * 60 * 1000;
+    if (lastSent && (Date.now() - lastSent) < windowMs) {
+      return true;
+    }
+
+    try {
+      const since = new Date(Date.now() - windowMs).toISOString();
+      const { data, error } = await supabase
+        .from('sent_notifications')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('disaster_id', disasterId)
+        .gte('sent_at', since)
+        .limit(1);
+      if (!error && data && data.length > 0) {
+        this.sentNotificationsMemory.set(key, Date.now());
+        return true;
+      }
+    } catch (e) {}
+
+    return false;
+  },
+
+  async getUserNotifications(userId) {
+    try {
+      let q = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
+      if (userId) {
+        q = q.eq('user_id', userId);
+      }
+      const { data, error } = await q;
+      if (!error && data) return data;
+    } catch (e) {}
+    return [];
+  },
+
+  // --- ML PREDICTION AUDIT TRAIL (Pillars 5 & 6) ---
+  async saveMlPrediction({ disasterId, predictedSeverity, confidence, modelVersion = 'v1.0-tfidf', description = '' }) {
+    try {
+      const record = {
+        disaster_id: disasterId || null,
+        predicted_severity: predictedSeverity || 'MEDIUM',
+        confidence: confidence || 0.85,
+        model_version: modelVersion,
+        description_text: (description || '').substring(0, 500),
+        created_at: new Date().toISOString()
+      };
+      const { data, error } = await supabase
+        .from('ml_predictions')
+        .insert([record])
+        .select();
+      if (!error && data && data.length > 0) return data[0];
+      return record;
+    } catch (e) {
+      return { disasterId, predictedSeverity, confidence, modelVersion };
+    }
+  },
+
+  // --- DRY RUN & CLEANUP COUNTS (Pillar 8) ---
+  async getDryRunCleanupCounts() {
+    const tables = [
+      'disasters',
+      'reports',
+      'resources',
+      'volunteers',
+      'comments',
+      'assignments',
+      'tasks',
+      'notifications',
+      'ml_predictions'
+    ];
+
+    const counts = {};
+    for (const t of tables) {
+      try {
+        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+        counts[t] = (!error && typeof count === 'number') ? count : 0;
+      } catch (err) {
+        counts[t] = 0;
+      }
+    }
+
+    try {
+      const { data: users } = await supabase.from('users').select('id,role,phone');
+      if (users) {
+        const testUsers = users.filter(u => {
+          const r = String(u.role || '').toUpperCase();
+          const phone = String(u.phone || '');
+          return !['ADMIN', 'SUPER_ADMIN'].includes(r) && phone !== '9598349738' && phone !== '9999999999';
+        });
+        counts['test_users'] = testUsers.length;
+        counts['protected_admins'] = users.length - testUsers.length;
+      }
+    } catch (err) {
+      counts['test_users'] = 0;
+    }
+
+    return counts;
   },
 
   async getPendingUsers() {
@@ -944,8 +1063,10 @@ const supabaseDb = {
       totalDisasters: (disasters || []).length,
       activeDisasters,
       pendingDisasters,
+      pendingVerification: (disasters || []).filter(d => d.status === 'PENDING_VERIFICATION').length,
       totalReportsAggregated: totalReports,
       activeVolunteers: (volunteers || []).length,
+      volunteersCount: (volunteers || []).length,
       totalResourcesAvailable: (resources || []).length,
       pendingUserApprovals: pendingUsers
     };
@@ -1004,7 +1125,8 @@ const supabaseDb = {
           .filter(u => {
             const r = String(u.role || '').trim().toUpperCase();
             const phone = String(u.phone || '').trim();
-            return !['ADMIN', 'SUPER_ADMIN'].includes(r) && phone !== '9598349738' && phone !== '9999999999';
+            const preservedPhones = ['9598349738', '9999999999', '9876543210', '7550075512'];
+            return !['ADMIN', 'SUPER_ADMIN'].includes(r) && !preservedPhones.includes(phone);
           })
           .map(u => u.id);
 

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>D-Connect | Disaster Management Coordination App</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
   <link rel="icon" type="image/png" href="assets/logo.png">
   <link rel="shortcut icon" type="image/png" href="assets/logo.png">
   <link rel="stylesheet" href="css/style.css">
@@ -13,8 +15,8 @@
 <body>
 
   <!-- No Internet State Banner -->
-  <div id="offlineBanner">
-    ⚠️ Network connection lost! Working in offline mode. Reconnecting...
+  <div id="offlineBanner" style="display: none; background: #dc2626; color: white; text-align: center; padding: 12px 18px; font-weight: 700; font-size: 0.95rem; border-bottom: 2px solid #b91c1c;">
+    ⚠️ You are offline. Limited features available. Reconnecting automatically when online...
   </div>
 
   <!-- Realtime Toast Notifications Container -->
@@ -24,58 +26,22 @@
        SPLIT SCREEN LANDING & AUTHENTICATION (Matching Reference UI)
        ============================================================================== -->
   <div id="authLandingScreen" class="auth-hero-wrapper">
+    <!-- Continuous Unified Background & Atmosphere Layer -->
+    <div class="hero-unified-backdrop"></div>
+    <div class="hero-radar-grid"></div>
+    <div class="hero-ambient-glow glow-1"></div>
+    <div class="hero-ambient-glow glow-2"></div>
+    <div class="hero-ambient-glow glow-3"></div>
     
-    <!-- LEFT SIDE: Hero Visuals & Animated Helicopter -->
+    <!-- LEFT SIDE: Hero Visuals & Information -->
     <div class="auth-hero-left">
-      <div class="hero-backdrop-scenery"></div>
-      
-      <!-- Animated Rescue Helicopter Stage -->
-      <div class="helicopter-sky-stage">
-        <div class="rescue-helicopter">
-          <!-- Helicopter SVG Graphic with animated spinning rotors -->
-          <svg viewBox="0 0 180 90" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- Main Rotor Blades -->
-            <g class="heli-main-rotor">
-              <line x1="10" y1="12" x2="160" y2="12" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
-              <line x1="30" y1="12" x2="140" y2="12" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
-              <circle cx="85" cy="12" r="4" fill="#0f172a" />
-            </g>
-            <rect x="83" y="12" width="4" height="10" fill="#334155" />
-
-            <!-- Helicopter Body -->
-            <path d="M45,46 Q50,22 90,22 L120,24 Q145,26 150,45 Q152,60 125,62 L60,62 Q45,60 45,46 Z" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
-            <!-- Red Emergency Stripe -->
-            <path d="M50,46 Q70,40 120,40 L145,46 L140,52 L55,52 Z" fill="#dc2626" />
-            <!-- Cockpit Windows -->
-            <path d="M115,28 Q138,30 142,44 L115,44 Z" fill="#38bdf8" opacity="0.85" stroke="#0f172a" stroke-width="1.5"/>
-            <path d="M85,26 L110,26 L110,44 L85,44 Z" fill="#0284c7" opacity="0.8" />
-
-            <!-- Tail Boom & Fin -->
-            <path d="M45,38 L15,42 L12,30 L6,30 L10,50 L18,46 L45,48 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.5"/>
-            <!-- Tail Rotor -->
-            <g class="heli-tail-rotor">
-              <line x1="5" y1="44" x2="25" y2="44" stroke="#ffffff" stroke-width="2.5" />
-              <circle cx="15" cy="44" r="2.5" fill="#dc2626" />
-            </g>
-
-            <!-- Landing Skids -->
-            <line x1="60" y1="62" x2="55" y2="72" stroke="#334155" stroke-width="2.5" />
-            <line x1="115" y1="62" x2="110" y2="72" stroke="#334155" stroke-width="2.5" />
-            <line x1="45" y1="72" x2="135" y2="72" stroke="#0f172a" stroke-width="3.5" stroke-linecap="round"/>
-          </svg>
-
-          <!-- Rescue Winch Wire & Hook -->
-          <div class="heli-rescue-wire">
-            <div class="heli-rescue-hook"></div>
-          </div>
-
-          <!-- Dynamic Searchlight Beam -->
-          <div class="heli-searchlight"></div>
-        </div>
-      </div>
 
       <!-- Hero Header & Branding -->
-      <div>
+      <div class="hero-content-wrapper">
+        <div class="hero-live-status-pill">
+          <span class="live-status-beacon"></span>
+          <span>OPERATIONAL LEVEL 1 &bull; LIVE COORDINATION ACTIVE</span>
+        </div>
         <div class="hero-header-tag">PEOPLE • RESPONSE • RESILIENCE</div>
         <h1 class="hero-main-title">
           Disaster<br>
@@ -140,13 +106,18 @@
 
         <!-- Brand Logo Header -->
         <div class="auth-card-brand">
+          <div class="auth-terminal-chip">
+            <span class="terminal-dot"></span>
+            <span>SECURE INCIDENT TERMINAL</span>
+          </div>
           <img src="assets/logo.png" alt="D-Connect Logo" class="auth-brand-logo">
           <h2 class="auth-brand-title">D-Connect</h2>
           <p class="auth-brand-tagline">Disaster Management Coordination App</p>
         </div>
 
-        <!-- Role Selector Tabs -->
+        <!-- Role Selector Tabs (iOS Liquid Glass Slider) -->
         <div class="role-tabs-bar" id="loginRoleTabs">
+          <div class="liquid-glass-indicator" id="liquidRoleSlider"></div>
           <button type="button" class="role-tab-item active" onclick="selectLoginRole('USER', this)">
             <span class="role-tab-icon">👤</span>
             <span>User</span>
@@ -167,6 +138,12 @@
             <span class="role-tab-icon">⚙️</span>
             <span>Admin</span>
           </button>
+        </div>
+
+        <!-- Dynamic Role Context Hint Badge -->
+        <div id="roleHintBadge" class="role-hint-badge">
+          <span id="roleHintIcon">👤</span>
+          <span id="roleHintText">Citizen Reporting & Public Safety Network</span>
         </div>
 
         <div id="landingLoginAlert"></div>
@@ -198,6 +175,11 @@
               autocomplete="new-password"
               oninput="handleLoginInputChange()"
               required>
+            <button type="button" class="password-toggle-btn" onclick="toggleLoginPasswordVisibility()" title="Toggle password visibility">
+              <span id="passwordVisibilityIcon" style="display:flex;align-items:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </span>
+            </button>
           </div>
 
           <div id="loginInputHelper" class="input-hint-msg" style="display: none;"></div>
@@ -210,6 +192,27 @@
 
         <div class="auth-card-footer">
           New to D-Connect? <a href="#" onclick="openRegisterModal()">Register Now</a>
+        </div>
+
+        <!-- Mobile-Friendly APK Download CTA Card (Modern Tactical Glassmorphism) -->
+        <div class="landing-apk-download-box">
+          <div class="apk-download-top-glow"></div>
+          
+          <div class="apk-card-header">
+            <span class="apk-live-beacon"></span>
+            <span class="apk-header-title">OFFICIAL ANDROID APP &bull; DIRECT APK</span>
+          </div>
+
+          <a href="downloads/app.apk" download="app-release.apk" class="btn-download-app-link">
+            <span class="btn-download-icon-box">📥</span>
+            <span class="btn-download-label">Download Android App (.apk)</span>
+          </a>
+
+          <div class="apk-specs-row">
+            <span class="apk-spec-chip">⚡ Fast Offline Mode</span>
+            <span class="apk-spec-chip">🛡️ Verified Secure APK</span>
+            <span class="apk-spec-chip">Android 8.0+</span>
+          </div>
         </div>
 
         <div class="auth-bottom-tagline">
@@ -236,7 +239,7 @@
       </div>
       
       <div class="user-status-bar">
-        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px;">
+        <div id="userInfoBlock" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
           <span id="userBadgeRole" class="badge badge-admin">ADMIN</span>
           <span id="userNameDisplay" style="font-weight: 700; font-size: 0.95rem; color: var(--primary-dark);">Super Admin</span>
           <button class="btn btn-outline btn-sm" onclick="logout()">Logout</button>
@@ -274,11 +277,8 @@
       <div id="accessDeniedView" class="error-page-container">
         <div class="error-icon">🚫</div>
         <h2 class="error-title">403 - Access Denied</h2>
-        <p class="error-text">You are currently signed in as a standard user account. Administrative privileges are required to view or execute actions in the Command Center.</p>
-        <div style="display: flex; gap: 12px; justify-content: center; margin-top: 16px; flex-wrap: wrap;">
-          <button class="btn btn-primary" onclick="switchTab('feedTab')">Return to Disaster Feed</button>
-          <button class="btn btn-outline" onclick="logout()">🔑 Sign In as Admin</button>
-        </div>
+        <p class="error-text">You do not have administrative permission to view or execute actions in this section.</p>
+        <button class="btn btn-primary" onclick="switchTab('feedTab')">Return to Disaster Feed</button>
       </div>
 
       <!-- 404 Page Not Found View -->
@@ -549,6 +549,19 @@
           </div>
         </div>
 
+        <!-- Emergency Command Actions Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 18px; border-radius: var(--radius-md); margin-bottom: 16px; border: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <strong style="color: var(--text-main); font-size: 0.95rem;">⚡ Admin Actions:</strong>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadAdminData()" title="Reload all admin tables">🔄 Refresh</button>
+            <button type="button" id="deleteAllDisastersBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllIncidents()" title="Delete all reported disaster incidents">🗑️ Delete All Disasters</button>
+            <button type="button" id="deleteAllResourcesBtn" class="btn btn-danger btn-sm" onclick="promptDeleteAllResources()" title="Delete all emergency resource supply posts">📦 Delete All Resources</button>
+            <button type="button" id="resetSystemDataBtn" class="btn btn-outline btn-sm" style="color: #dc2626; border-color: #fca5a5;" onclick="promptResetSystemData()" title="Wipe all test records & reset system">⚠️ Reset System Data</button>
+          </div>
+        </div>
+
         <!-- Filter System Top Bar -->
         <div class="admin-filter-bar">
           <div class="admin-filter-group" style="flex: 2; min-width: 220px;">
@@ -602,9 +615,8 @@
                 <th>Location</th>
                 <th>Reported By</th>
                 <th>Role</th>
-                <th>Status</th>
-                <th>ML Predicted Severity</th>
-                <th>Override Severity</th>
+                <th>Status (Inline Select)</th>
+                <th>Priority</th>
                 <th>Reports</th>
                 <th>Time</th>
                 <th>Actions</th>
@@ -612,7 +624,7 @@
             </thead>
             <tbody id="adminReportsTableBody">
               <tr>
-                <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
                   Loading incident reports from Supabase database...
                 </td>
               </tr>
@@ -682,26 +694,6 @@
           </div>
         </div>
 
-        <!-- System Control / Master Reset Section -->
-        <div class="card" style="margin-top: 24px; border: 1px solid #fecaca; background: #fff5f5;">
-          <div class="card-header" style="border-bottom: 1px solid #fecaca; background: #fef2f2;">
-            <div class="card-title" style="color: #991b1b; display: flex; align-items: center; gap: 8px;">
-              ⚙️ System Control & Data Management
-            </div>
-          </div>
-          <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
-            <div>
-              <h4 style="color: #991b1b; margin-bottom: 4px; font-weight: 700;">⚠️ MASTER RESET SYSTEM</h4>
-              <p style="font-size: 0.88rem; color: #7f1d1d; margin: 0;">
-                Permanently purge all disaster reports, citizen accounts, volunteer tasks, resources, and system logs. Preserves Administrator credentials.
-              </p>
-            </div>
-            <button class="btn btn-danger" style="background: #dc2626; color: white; padding: 10px 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; border-radius: 8px;" onclick="promptMasterResetStep1()">
-              ⚠️ DELETE ALL DATA
-            </button>
-          </div>
-        </div>
-
       </section>
 
     </main>
@@ -756,6 +748,25 @@
           <div class="form-group">
             <label>Volunteer Skills / Expertise</label>
             <input type="text" id="regSkills" class="form-control" placeholder="e.g. First Aid, Swimming, Boat Driving, Medical">
+          </div>
+        </div>
+
+        <!-- Home Location Setup (User & Volunteer 30km Alert Radius) -->
+        <div style="background: var(--bg-tertiary, #f8fafc); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-color); margin: 14px 0;">
+          <label style="font-weight: 700; color: var(--text-main); font-size: 0.9rem; display: block; margin-bottom: 6px;">📍 Set Home Location (30km Radius Alert System) *</label>
+          <div class="form-group" style="margin-bottom: 8px;">
+            <input type="text" id="regHomeAddress" class="form-control" placeholder="Home Address e.g. T. Nagar, Chennai" required>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" style="width: 100%; margin-bottom: 8px; font-weight: 600;" onclick="openLocationPicker('home')">
+            📍 Select Home Location on Interactive Map
+          </button>
+          <div class="grid-2">
+            <div class="form-group" style="margin-bottom: 0;">
+              <input type="number" step="any" id="regHomeLat" class="form-control" placeholder="Home Lat *" required value="13.0827">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <input type="number" step="any" id="regHomeLng" class="form-control" placeholder="Home Lon *" required value="80.2707">
+            </div>
           </div>
         </div>
 
@@ -901,8 +912,12 @@
     <div class="modal-content" style="max-width: 650px; width: 95%;">
       <div class="card-header">
         <h3 class="card-title">📍 Select Incident Location</h3>
-        <button class="btn btn-outline btn-sm" onclick="closeModal('locationPickerModal')">✕</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="openModal('gpsPermissionModal')" title="GPS Help">📍 GPS Help</button>
+          <button class="btn btn-outline btn-sm" onclick="closeModal('locationPickerModal')">✕</button>
+        </div>
       </div>
+      <div id="locationPickerFallbackBanner" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 10px;"></div>
       <p style="color: var(--text-secondary); margin: 8px 0 12px 0; font-size: 0.88rem;">
         Click anywhere on the map or drag the marker to specify exact incident coordinates.
       </p>
@@ -914,6 +929,38 @@
       <div style="display: flex; gap: 12px; justify-content: flex-end;">
         <button type="button" class="btn btn-outline" onclick="closeModal('locationPickerModal')">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="confirmLocationPickerSelection()">Confirm Location</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GPS Permission Help Modal -->
+  <div id="gpsPermissionModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 500px; width: 95%;">
+      <div class="card-header">
+        <h3 class="card-title">📍 Enabling Location Permissions</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('gpsPermissionModal')">✕</button>
+      </div>
+      <div style="font-size: 0.9rem; line-height: 1.5; color: var(--text-secondary); margin-bottom: 16px;">
+        <p><strong>On Android (Chrome):</strong></p>
+        <ol style="margin-left: 20px; margin-bottom: 10px;">
+          <li>Tap the 🔒 lock or settings icon in the address bar.</li>
+          <li>Tap <strong>Permissions</strong> → <strong>Location</strong>.</li>
+          <li>Select <strong>Allow</strong>.</li>
+        </ol>
+        <p><strong>On iOS (Safari):</strong></p>
+        <ol style="margin-left: 20px; margin-bottom: 10px;">
+          <li>Open iPhone <strong>Settings</strong> → <strong>Safari</strong> → <strong>Location</strong>.</li>
+          <li>Select <strong>Ask</strong> or <strong>Allow</strong>.</li>
+        </ol>
+        <p><strong>On Desktop:</strong></p>
+        <ol style="margin-left: 20px;">
+          <li>Click the site security icon in the URL bar.</li>
+          <li>Set <strong>Location</strong> to <strong>Allow</strong> and refresh.</li>
+        </ol>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('gpsPermissionModal')">Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal('gpsPermissionModal'); captureBrowserLocation();">🔄 Retry GPS Fix</button>
       </div>
     </div>
   </div>
@@ -1076,52 +1123,60 @@
     </div>
   </div>
 
-  <!-- Master Reset Step 1 Warning Modal -->
-  <div id="masterResetStep1Modal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 460px; border-top: 4px solid #dc2626;">
-      <div class="card-header" style="border-bottom: 1px solid #fee2e2;">
-        <h3 class="card-title" style="color: #dc2626;">⚠️ WARNING</h3>
-        <button class="btn btn-outline btn-sm" onclick="closeModal('masterResetStep1Modal')">✕</button>
+  <!-- Admin Delete All Disasters Modal -->
+  <div id="adminDeleteAllIncidentsModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">🗑️ Delete All Disaster Reports</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllIncidentsModal')">✕</button>
       </div>
-      <div style="padding: 16px 0;">
-        <p style="color: #991b1b; font-weight: 700; font-size: 0.95rem; margin-bottom: 8px;">
-          This will permanently delete all users, disasters, reports, and system data.
-        </p>
-        <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">
-          This action CANNOT be undone.
-        </p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
-        <button type="button" class="btn btn-outline" onclick="closeModal('masterResetStep1Modal')">Cancel</button>
-        <button type="button" class="btn btn-danger" style="background: #dc2626; color: white; font-weight: 700;" onclick="handleMasterResetStep1Continue()">Continue ➔</button>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL disaster incidents, reports, assignments, and discussions</strong> from the live system.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllIncidentsModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllIncidentsBtn" class="btn btn-danger" onclick="executeDeleteAllIncidents()">Yes, Delete All Disasters</button>
       </div>
     </div>
   </div>
 
-  <!-- Master Reset Step 2 Confirmation Modal (Type CONFIRM) -->
-  <div id="masterResetStep2Modal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 460px; border-top: 4px solid #dc2626;">
-      <div class="card-header" style="border-bottom: 1px solid #fee2e2;">
-        <h3 class="card-title" style="color: #dc2626;">🔐 SECOND LEVEL VERIFICATION</h3>
-        <button class="btn btn-outline btn-sm" onclick="closeModal('masterResetStep2Modal')">✕</button>
+  <!-- Admin Delete All Resources Modal -->
+  <div id="adminDeleteAllResourcesModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">📦 Delete All Emergency Resources</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminDeleteAllResourcesModal')">✕</button>
       </div>
-      <form onsubmit="handleMasterResetStep2Submit(event)">
-        <p style="color: var(--text-secondary); margin: 12px 0 16px 0; font-size: 0.9rem; line-height: 1.5;">
-          Type <strong>CONFIRM</strong> in uppercase below to proceed with system reset:
-        </p>
-        <div class="form-group">
-          <input type="text" id="masterResetTextInput" class="form-control" placeholder="Type CONFIRM" required autocomplete="off" style="font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
-        </div>
-        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px;">
-          <button type="button" class="btn btn-outline" onclick="closeModal('masterResetStep2Modal')">Cancel</button>
-          <button type="submit" id="masterResetSubmitBtn" class="btn btn-danger" disabled style="background: #dc2626; color: white; font-weight: 700;">CONFIRM DELETE</button>
-        </div>
-      </form>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        ⚠️ <strong>Warning:</strong> This will permanently delete <strong>ALL emergency resource supply posts</strong> from the database.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminDeleteAllResourcesModal')">Cancel</button>
+        <button type="button" id="confirmDeleteAllResourcesBtn" class="btn btn-danger" onclick="executeDeleteAllResources()">Yes, Delete All Resources</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin System Reset Modal -->
+  <div id="adminResetSystemModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="card-header">
+        <h3 class="card-title" style="color: #dc2626;">⚠️ Master System Reset</h3>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('adminResetSystemModal')">✕</button>
+      </div>
+      <p style="color: var(--text-secondary); margin: 16px 0; font-size: 0.95rem; line-height: 1.5;">
+        This will wipe all test incidents, resources, volunteer assignments, and audit logs while preserving your Administrator account.
+      </p>
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('adminResetSystemModal')">Cancel</button>
+        <button type="button" id="confirmResetSystemBtn" class="btn btn-danger" onclick="executeResetSystemData()">Confirm System Reset</button>
+      </div>
     </div>
   </div>
 
   <!-- Supabase JS SDK (Version 2) for Realtime Subscriptions -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script src="js/app.js"></script>
 </body>
 </html>

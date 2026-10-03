@@ -3,7 +3,7 @@
  * Realtime Supabase Subscriptions, Toast Notifications, and Strict Manual Auth
  */
 
-const API_BASE = (typeof window !== 'undefined' && window.REACT_APP_API_URL) || (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) || '/api';
+const API_BASE = '/api';
 
 // Supabase Project Credentials
 const SUPABASE_CONFIG = {
@@ -27,35 +27,36 @@ document.addEventListener('DOMContentLoaded', () => {
   initNetworkListeners();
   initGeolocation();
   initSupabaseRealtime();
+  registerServiceWorker();
   restoreSession();
 
-  // Requirement 10: Optimized 2s periodic polling sync (only active when tab is visible)
+  // Initialize iOS Liquid Glass Role Slider
+  setTimeout(updateLiquidSlider, 60);
+  window.addEventListener('resize', () => updateLiquidSlider(), { passive: true });
+
+  // Requirement 8: Real-time 10s periodic polling fallback sync
   setInterval(() => {
-    if (document.visibilityState === 'visible' && currentUser && currentUser.approved) {
-      const activeTab = document.querySelector('.tab-pane.active');
+    if (currentUser && currentUser.approved) {
+      const activeTab = document.querySelector('.tab-content.active');
       if (activeTab && activeTab.id === 'feedTab') {
         loadDisasters();
-      } else if (activeTab && activeTab.id === 'adminTab' && isAdminUser(currentUser)) {
+      } else if (activeTab && activeTab.id === 'adminTab') {
         loadAdminReportsTable();
-      } else if (activeTab && activeTab.id === 'volunteerTab') {
-        loadVolunteerData();
-      } else if (activeTab && activeTab.id === 'resourceTab') {
-        loadResources();
       }
     }
-  }, 2000);
+  }, 10000);
 });
 
 // Resilient API Fetch Helper (Guarantees JSON parsing & handles non-JSON HTML errors safely)
 async function fetchAPI(endpoint, options = {}) {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-  const token = (currentUser && currentUser.token) || localStorage.getItem('token') || localStorage.getItem('dconnect_token');
   const defaultHeaders = { 'Content-Type': 'application/json' };
+  
+  // Attach token from localStorage or state
+  const token = localStorage.getItem('token') || (currentUser && currentUser.token);
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
-    console.log("Token received:", token);
-    console.log("User role:", currentUser ? currentUser.role : "UNKNOWN");
-    console.log("API called:", url);
+    defaultHeaders['X-Auth-Token'] = token;
   }
   
   if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
@@ -243,6 +244,41 @@ function initNetworkListeners() {
   }
 }
 
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('📱 [Service Worker]: Active & registered on scope:', reg.scope);
+        })
+        .catch(err => {
+          console.warn('⚠️ [Service Worker]: Registration failed:', err);
+        });
+    });
+  }
+}
+
+async function registerDeviceToken() {
+  if (!currentUser || !currentUser.id) return;
+  try {
+    let token = localStorage.getItem('fcm_token');
+    if (!token) {
+      token = 'fcm_' + currentUser.id + '_' + Math.random().toString(36).substring(2, 10);
+      localStorage.setItem('fcm_token', token);
+    }
+    await fetchAPI('/users/device-token', {
+      method: 'POST',
+      body: {
+        userId: currentUser.id,
+        fcmToken: token,
+        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'web'
+      }
+    });
+  } catch (err) {
+    console.warn('⚠️ [Device Token]: Notice:', err.message);
+  }
+}
+
 function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
   console.error('API Error:', err);
   if (!navigator.onLine) {
@@ -374,10 +410,41 @@ function populateFormCoords(lat, lon) {
 // 6. STRICT MANUAL AUTHENTICATION (PHONE + PASSWORD)
 // ==============================================================================
 
+function updateLiquidSlider(btnEl) {
+  const slider = document.getElementById('liquidRoleSlider');
+  const container = document.getElementById('loginRoleTabs');
+  if (!slider || !container) return;
+  const target = btnEl || container.querySelector('.role-tab-item.active') || container.querySelector('.role-tab-item');
+  if (!target) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const left = targetRect.left - containerRect.left;
+  slider.style.transform = `translateX(${left}px)`;
+  slider.style.width = `${targetRect.width}px`;
+}
+
 function selectLoginRole(role, btnEl) {
   selectedLoginRole = role;
   document.querySelectorAll('#loginRoleTabs .role-tab-item').forEach(btn => btn.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+
+  // Smooth liquid slider transition
+  updateLiquidSlider(btnEl);
+
+  // Dynamic context hint update
+  const roleHints = {
+    USER: { icon: '👤', text: 'Citizen Reporting & Public Safety Network' },
+    VOLUNTEER: { icon: '🦺', text: 'On-ground Mission Response & Task Force' },
+    NGO: { icon: '👥', text: 'Relief Logistics & Resource Aid Distribution' },
+    GOVERNMENT_AGENCY: { icon: '🏛️', text: 'Disaster Authority & Official Intervention' },
+    ADMIN: { icon: '⚙️', text: 'System Governance & Verification Center' }
+  };
+
+  const hintInfo = roleHints[role] || roleHints.USER;
+  const hintIconEl = document.getElementById('roleHintIcon');
+  const hintTextEl = document.getElementById('roleHintText');
+  if (hintIconEl) hintIconEl.textContent = hintInfo.icon;
+  if (hintTextEl) hintTextEl.textContent = hintInfo.text;
 
   const phoneInput = document.getElementById('landingLoginPhone');
   const passInput = document.getElementById('landingLoginPassword');
@@ -388,6 +455,23 @@ function selectLoginRole(role, btnEl) {
   if (alertBox) alertBox.innerHTML = '';
 
   handleLoginInputChange();
+}
+
+function toggleLoginPasswordVisibility() {
+  const passInput = document.getElementById('landingLoginPassword');
+  const iconEl = document.getElementById('passwordVisibilityIcon');
+  if (!passInput) return;
+  if (passInput.type === 'password') {
+    passInput.type = 'text';
+    if (iconEl) {
+      iconEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    }
+  } else {
+    passInput.type = 'password';
+    if (iconEl) {
+      iconEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    }
+  }
 }
 
 function handleLoginInputChange() {
@@ -420,19 +504,18 @@ function handleLoginInputChange() {
 
 function restoreSession() {
   const stored = localStorage.getItem('dconnect_user');
-  const storedToken = localStorage.getItem('token') || localStorage.getItem('dconnect_token');
   if (stored) {
     try {
       currentUser = JSON.parse(stored);
-      if (storedToken && currentUser) {
-        currentUser.token = storedToken;
+      if (currentUser && currentUser.token && !localStorage.getItem('token')) {
+        localStorage.setItem('token', currentUser.token);
       }
       showDashboardApp();
       updateUserUI();
+      registerDeviceToken();
       loadDisasters();
     } catch (e) {
       localStorage.removeItem('dconnect_user');
-      localStorage.removeItem('dconnect_token');
       localStorage.removeItem('token');
       showAuthLanding();
     }
@@ -457,10 +540,16 @@ function showDashboardApp() {
   document.getElementById('mainDashboardApp').style.display = 'flex';
 }
 
-function isAdminUser(user) {
-  if (!user || !user.role) return false;
-  const r = String(user.role).trim().toUpperCase();
-  return ['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'].includes(r);
+function hasAdminPrivileges(user) {
+  if (!user) return false;
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'];
+  if (typeof user.role === 'string' && allowed.includes(user.role.trim().toUpperCase())) {
+    return true;
+  }
+  if (Array.isArray(user.roles)) {
+    return user.roles.some(r => typeof r === 'string' && allowed.includes(r.trim().toUpperCase()));
+  }
+  return false;
 }
 
 function updateUserUI() {
@@ -473,10 +562,10 @@ function updateUserUI() {
     roleBadge.className = `badge badge-${currentUser.role.toLowerCase().replace('_', '')}`;
     nameDisp.textContent = currentUser.name + (currentUser.organizationName ? ` (${currentUser.organizationName})` : '');
 
-    if (isAdminUser(currentUser)) {
-      if (adminNav) adminNav.style.display = 'inline-block';
+    if (hasAdminPrivileges(currentUser)) {
+      adminNav.style.display = 'block';
     } else {
-      if (adminNav) adminNav.style.display = 'none';
+      adminNav.style.display = 'none';
     }
 
     if (!currentUser.approved && (currentUser.role === 'NGO' || currentUser.role === 'GOVERNMENT_AGENCY')) {
@@ -488,7 +577,6 @@ function updateUserUI() {
 function logout() {
   currentUser = null;
   localStorage.removeItem('dconnect_user');
-  localStorage.removeItem('dconnect_token');
   localStorage.removeItem('token');
   hideAllErrorViews();
   showAuthLanding();
@@ -549,7 +637,6 @@ async function handleLandingLogin(e) {
 
     currentUser = data.data;
     if (currentUser && currentUser.token) {
-      localStorage.setItem('dconnect_token', currentUser.token);
       localStorage.setItem('token', currentUser.token);
     }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
@@ -558,6 +645,7 @@ async function handleLandingLogin(e) {
 
     showDashboardApp();
     updateUserUI();
+    registerDeviceToken();
     showToast('Welcome Back', `Logged in as ${currentUser.name}`, 'success');
 
     if (!currentUser.approved) {
@@ -574,6 +662,16 @@ async function handleLandingLogin(e) {
   }
 }
 
+
+
+
+function updateRoleBadge(roleTitle, roleDesc) {
+  const badge = document.getElementById('role-badge');
+  const desc = document.getElementById('role-description');
+  if (badge) badge.textContent = roleTitle;
+  if (desc) desc.textContent = roleDesc;
+}
+
 async function handleRegister(e) {
   e.preventDefault();
   const alertBox = document.getElementById('registerAlertBox');
@@ -586,7 +684,10 @@ async function handleRegister(e) {
     role: document.getElementById('regRole').value,
     organizationName: document.getElementById('regOrgName').value.trim() || null,
     organizationRegNo: document.getElementById('regOrgRegNo').value.trim() || null,
-    volunteerSkills: document.getElementById('regSkills').value.trim() || null
+    volunteerSkills: document.getElementById('regSkills').value.trim() || null,
+    homeAddress: document.getElementById('regHomeAddress')?.value.trim() || null,
+    homeLat: document.getElementById('regHomeLat')?.value ? parseFloat(document.getElementById('regHomeLat').value) : null,
+    homeLng: document.getElementById('regHomeLng')?.value ? parseFloat(document.getElementById('regHomeLng').value) : null
   };
 
   try {
@@ -597,7 +698,7 @@ async function handleRegister(e) {
 
     currentUser = data.data;
     if (currentUser && currentUser.token) {
-      localStorage.setItem('dconnect_token', currentUser.token);
+      localStorage.setItem('token', currentUser.token);
     }
     localStorage.setItem('dconnect_user', JSON.stringify(currentUser));
     closeModal('registerModal');
@@ -937,97 +1038,47 @@ async function loadVolunteerData() {
   loadVolunteersDirectory();
 }
 
-let volunteerAssignmentsListCache = [];
-let volunteerAssignmentsPage = 1;
-
 async function loadVolunteerAssignments() {
   const container = document.getElementById('volunteerAssignmentsList');
   if (!container) return;
 
+  let url = '/volunteers/assignments';
+
   try {
-    const data = await fetchAPI('/volunteers/assignments');
-    volunteerAssignmentsListCache = data.data || [];
-    renderVolunteerAssignments();
-  } catch (err) {
-    handleApiError(err);
-  }
-}
+    const data = await fetchAPI(url);
+    const list = data.data || [];
+    if (list.length === 0) {
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No rescue mission assignments found.</p>`;
+      return;
+    }
 
-function renderVolunteerAssignments() {
-  const container = document.getElementById('volunteerAssignmentsList');
-  if (!container) return;
-
-  if (volunteerAssignmentsListCache.length === 0) {
-    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No rescue mission assignments found.</p>`;
-    return;
-  }
-
-  const listPageSize = 10;
-  const total = volunteerAssignmentsListCache.length;
-  const totalPages = Math.ceil(total / listPageSize) || 1;
-  if (volunteerAssignmentsPage > totalPages) volunteerAssignmentsPage = totalPages;
-  if (volunteerAssignmentsPage < 1) volunteerAssignmentsPage = 1;
-
-  const startIdx = (volunteerAssignmentsPage - 1) * listPageSize;
-  const pageItems = volunteerAssignmentsListCache.slice(startIdx, startIdx + listPageSize);
-
-  const itemsHtml = pageItems.map(a => {
-    const statusVal = (a.status || 'ASSIGNED').toUpperCase();
-    let badgeClass = 'badge-medium';
-    let statusLabel = `📌 ${statusVal}`;
-    if (statusVal === 'IN_PROGRESS') { badgeClass = 'badge-status-active'; statusLabel = `⚡ IN_PROGRESS`; }
-    if (statusVal === 'COMPLETED') { badgeClass = 'badge-low'; statusLabel = `✓✓ COMPLETED`; }
-    if (statusVal === 'CANCELLED') { badgeClass = 'badge-high'; statusLabel = `✕ CANCELLED`; }
-
-    const canEditStatus = currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO' || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'GOVERNMENT');
-
-    return `
+    container.innerHTML = list.map(a => `
       <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-          <strong style="font-size: 0.95rem; color: var(--text-main);">🎯 ${escapeHtml(a.taskTitle)}</strong>
-          <span class="badge ${badgeClass}" style="font-weight: 700;">${statusLabel}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong>🎯 ${escapeHtml(a.taskTitle)}</strong>
+          <span class="badge badge-status-${a.status.toLowerCase()}">${a.status}</span>
         </div>
-        <div style="font-size: 0.83rem; color: var(--text-muted); margin: 6px 0;">
-          🚨 Disaster: <em>${escapeHtml(a.disasterTitle || 'Emergency Incident')}</em><br>
-          🧑‍🚒 Volunteer: <strong>${escapeHtml(a.volunteerName)}</strong> (${escapeHtml(a.volunteerPhone || 'N/A')})
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
+          Disaster: <em>${escapeHtml(a.disasterTitle)}</em> | Volunteer: <strong>${escapeHtml(a.volunteerName)}</strong> (${escapeHtml(a.volunteerPhone)})
         </div>
-        <p style="font-size: 0.85rem; margin: 6px 0; color: var(--text-dark, #334155); background: var(--bg-hover, #f8fafc); padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--primary);">
-          ${escapeHtml(a.taskDescription)}
-        </p>
+        <p style="font-size: 0.85rem; margin: 6px 0;">${escapeHtml(a.taskDescription)}</p>
         
-        ${canEditStatus ? `
+        ${currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO') ? `
           <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
-            <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">Status:</label>
-            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem; height: 32px;" onchange="updateMissionStatus(${a.id}, this.value)">
-              <option value="ASSIGNED" ${statusVal === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
-              <option value="IN_PROGRESS" ${statusVal === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
-              <option value="COMPLETED" ${statusVal === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
-              <option value="CANCELLED" ${statusVal === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
+            <label style="font-size: 0.8rem; font-weight: 700;">Status:</label>
+            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem;" onchange="updateMissionStatus(${a.id}, this.value)">
+              <option value="ASSIGNED" ${a.status === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
+              <option value="IN_PROGRESS" ${a.status === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
+              <option value="COMPLETED" ${a.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
+              <option value="CANCELLED" ${a.status === 'CANCELLED' ? 'selected' : ''}>CANCELLED</option>
             </select>
           </div>
         ` : ''}
       </div>
-    `;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="fixed-scroll-container">
-      ${itemsHtml}
-    </div>
-    <div class="custom-pagination-bar">
-      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} missions</span>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="changeVolunteerAssignmentPage(-1)" ${volunteerAssignmentsPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
-        <span style="font-weight: 700;">Page ${volunteerAssignmentsPage} of ${totalPages}</span>
-        <button class="btn btn-outline btn-sm" onclick="changeVolunteerAssignmentPage(1)" ${volunteerAssignmentsPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
-      </div>
-    </div>
-  `;
-}
-
-function changeVolunteerAssignmentPage(delta) {
-  volunteerAssignmentsPage += delta;
-  renderVolunteerAssignments();
+    `).join('');
+  } catch (err) {
+    handleApiError(err);
+  }
 }
 
 async function updateMissionStatus(assignmentId, newStatus) {
@@ -1043,9 +1094,6 @@ async function updateMissionStatus(assignmentId, newStatus) {
   }
 }
 
-let volunteersListCache = [];
-let volunteerListPage = 1;
-
 async function loadVolunteersDirectory() {
   const container = document.getElementById('volunteersDirectoryList');
   if (!container) return;
@@ -1057,64 +1105,29 @@ async function loadVolunteersDirectory() {
     } catch (e) {
       data = await fetchAPI(`/volunteers/available?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`);
     }
-    volunteersListCache = data.data || [];
-    renderVolunteersDirectory();
+    const list = data.data || [];
+    if (list.length === 0) {
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No registered volunteers found in directory.</p>`;
+      return;
+    }
+
+    container.innerHTML = list.map(v => `
+      <div style="border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong>🧑‍🚒 ${escapeHtml(v.name || 'Volunteer')}</strong>
+          <span class="badge badge-status-active" style="margin-left: 6px;">VOLUNTEER</span>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+            🛠️ Skills: ${escapeHtml(v.skills || 'General Relief')} | 📞 ${escapeHtml(v.phone || 'N/A')}
+          </div>
+        </div>
+        <div>
+          <span class="badge badge-${(v.availabilityStatus || 'AVAILABLE').toLowerCase() === 'available' ? 'low' : 'medium'}">${v.availabilityStatus || 'AVAILABLE'}</span>
+        </div>
+      </div>
+    `).join('');
   } catch (err) {
     handleApiError(err);
   }
-}
-
-function renderVolunteersDirectory() {
-  const container = document.getElementById('volunteersDirectoryList');
-  if (!container) return;
-
-  if (volunteersListCache.length === 0) {
-    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No registered volunteers found in directory.</p>`;
-    return;
-  }
-
-  const listPageSize = 10;
-  const total = volunteersListCache.length;
-  const totalPages = Math.ceil(total / listPageSize) || 1;
-  if (volunteerListPage > totalPages) volunteerListPage = totalPages;
-  if (volunteerListPage < 1) volunteerListPage = 1;
-
-  const startIdx = (volunteerListPage - 1) * listPageSize;
-  const pageItems = volunteersListCache.slice(startIdx, startIdx + listPageSize);
-
-  const itemsHtml = pageItems.map(v => `
-    <div style="border-bottom: 1px solid var(--border); padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <strong>🧑‍🚒 ${escapeHtml(v.name || 'Volunteer')}</strong>
-        <span class="badge badge-status-active" style="margin-left: 6px;">VOLUNTEER</span>
-        <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
-          🛠️ Skills: ${escapeHtml(v.skills || 'General Relief')} | 📞 ${escapeHtml(v.phone || 'N/A')}
-        </div>
-      </div>
-      <div>
-        <span class="badge badge-${(v.availabilityStatus || 'AVAILABLE').toLowerCase() === 'available' ? 'low' : 'medium'}">${v.availabilityStatus || 'AVAILABLE'}</span>
-      </div>
-    </div>
-  `).join('');
-
-  container.innerHTML = `
-    <div class="fixed-scroll-container">
-      ${itemsHtml}
-    </div>
-    <div class="custom-pagination-bar">
-      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} volunteers</span>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="changeVolunteerPage(-1)" ${volunteerListPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
-        <span style="font-weight: 700;">Page ${volunteerListPage} of ${totalPages}</span>
-        <button class="btn btn-outline btn-sm" onclick="changeVolunteerPage(1)" ${volunteerListPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
-      </div>
-    </div>
-  `;
-}
-
-function changeVolunteerPage(delta) {
-  volunteerListPage += delta;
-  renderVolunteersDirectory();
 }
 
 async function openAssignTaskModal(disasterId) {
@@ -1198,92 +1211,54 @@ function toggleNoExpiry(context = 'resource') {
 // 9. RESOURCE MANAGEMENT
 // ==============================================================================
 
-let resourcesListCache = [];
-let resourcePoolPage = 1;
-
 async function loadResources() {
   const container = document.getElementById('resourcePoolList');
   if (!container) return;
 
   try {
     const data = await fetchAPI('/resources/list');
-    resourcesListCache = data.data || [];
-    renderResourcesPool();
+    const list = data.data || [];
+    if (list.length === 0) {
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
+      return;
+    }
+
+    container.innerHTML = list.map(r => {
+      const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
+      const isDispatched = r.status === 'DISPATCHED';
+      const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
+      const expiryRaw = r.expiryDate || r.availableUntil || r.expiry_date;
+      const formattedExpiry = expiryRaw ? new Date(expiryRaw).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
+      const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
+      const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      const addressText = escapeHtml(r.address || 'Central Relief Pool');
+
+      return `
+        <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <strong>[${r.resourceType}] ${escapeHtml(r.description || r.resourceName)}</strong>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge ${badgeClass}">${r.status}</span>
+              <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
+            </div>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
+            📍 Pickup Location: <strong>${addressText}</strong><br>
+            Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
+            ⏳ Available Until: <strong>${formattedExpiry}</strong>
+          </div>
+          <div style="margin-top: 8px;">
+            <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; padding: 4px 10px; text-decoration: none;">
+              🗺️ View on Google Maps
+            </a>
+          </div>
+        </div>
+      `;
+    }).join('');
   } catch (err) {
     handleApiError(err);
   }
-}
-
-function renderResourcesPool() {
-  const container = document.getElementById('resourcePoolList');
-  if (!container) return;
-
-  if (resourcesListCache.length === 0) {
-    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
-    return;
-  }
-
-  const listPageSize = 10;
-  const total = resourcesListCache.length;
-  const totalPages = Math.ceil(total / listPageSize) || 1;
-  if (resourcePoolPage > totalPages) resourcePoolPage = totalPages;
-  if (resourcePoolPage < 1) resourcePoolPage = 1;
-
-  const startIdx = (resourcePoolPage - 1) * listPageSize;
-  const pageItems = resourcesListCache.slice(startIdx, startIdx + listPageSize);
-
-  const itemsHtml = pageItems.map(r => {
-    const isExhausted = r.status === 'EXHAUSTED' || r.status === 'EXPIRED' || r.status === 'REMOVED' || r.status === 'INACTIVE';
-    const isDispatched = r.status === 'DISPATCHED';
-    const badgeClass = isExhausted ? 'badge-high' : (isDispatched ? 'badge-medium' : 'badge-status-active');
-    const expiryRaw = r.expiryDate || r.availableUntil || r.expiry_date;
-    const formattedExpiry = expiryRaw ? new Date(expiryRaw).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'No Expiry';
-    const lat = r.latitude ? parseFloat(r.latitude) : 13.0827;
-    const lng = r.longitude ? parseFloat(r.longitude) : 80.2707;
-    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-    const addressText = escapeHtml(r.address || 'Central Relief Pool');
-
-    return `
-      <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <strong>[${r.resourceType}] ${escapeHtml(r.description || r.resourceName)}</strong>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <span class="badge ${badgeClass}">${r.status}</span>
-            <span class="badge badge-status-active">${r.quantity} ${escapeHtml(r.unit)}</span>
-          </div>
-        </div>
-        <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 6px;">
-          📍 Pickup Location: <strong>${addressText}</strong><br>
-          Provided by: <strong>${escapeHtml(r.providerName)}</strong> (${r.providerRole}) | Contact: ${escapeHtml(r.contactPhone || 'N/A')}<br>
-          ⏳ Available Until: <strong>${formattedExpiry}</strong>
-        </div>
-        <div style="margin-top: 8px;">
-          <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; padding: 4px 10px; text-decoration: none;">
-            🗺️ View on Google Maps
-          </a>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="fixed-scroll-container">
-      ${itemsHtml}
-    </div>
-    <div class="custom-pagination-bar">
-      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} resources</span>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="changeResourcePage(-1)" ${resourcePoolPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
-        <span style="font-weight: 700;">Page ${resourcePoolPage} of ${totalPages}</span>
-        <button class="btn btn-outline btn-sm" onclick="changeResourcePage(1)" ${resourcePoolPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
-      </div>
-    </div>
-  `;
-}
-
-function changeResourcePage(delta) {
-  resourcePoolPage += delta;
-  renderResourcesPool();
 }
 
 async function handleResourceSubmit(e) {
@@ -1416,7 +1391,7 @@ let adminSearchDebounceTimer = null;
 let pendingDeleteIncidentId = null;
 
 async function loadAdminData() {
-  if (!isAdminUser(currentUser)) {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showAccessDeniedView();
     return;
   }
@@ -1589,7 +1564,7 @@ async function submitAdminEditResource(e) {
 }
 
 function promptDeleteResource(resId, name) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can delete resource posts.', 'error');
     return;
   }
@@ -1730,8 +1705,6 @@ function renderAdminReportsTable() {
     const isPending = (d.status === 'PENDING_VERIFICATION' || d.status === 'PENDING');
     const isCancelled = (d.status === 'CANCELLED_BY_ADMIN' || d.status === 'CANCELLED');
     const severityVal = (d.severity || 'UNVERIFIED').toUpperCase();
-    const mlSeverityVal = (d.ml_severity || d.mlSeverity || d.severity || 'MEDIUM').toUpperCase();
-
     return `
       <tr>
         <td><strong>#${d.id}</strong></td>
@@ -1750,10 +1723,8 @@ function renderAdminReportsTable() {
           </select>
         </td>
         <td>
-          <span class="badge badge-${mlSeverityVal.toLowerCase()}" style="font-weight: 700;">🤖 ${mlSeverityVal}</span>
-        </td>
-        <td>
           <select class="admin-select-status" onchange="updateAdminInlineSeverity(${d.id}, this.value)">
+            <option value="UNVERIFIED" ${severityVal === 'UNVERIFIED' ? 'selected' : ''}>⚪ UNVERIFIED</option>
             <option value="LOW" ${severityVal === 'LOW' ? 'selected' : ''}>🟢 LOW</option>
             <option value="MEDIUM" ${severityVal === 'MEDIUM' ? 'selected' : ''}>🟡 MEDIUM</option>
             <option value="HIGH" ${severityVal === 'HIGH' ? 'selected' : ''}>🟠 HIGH</option>
@@ -1805,12 +1776,12 @@ async function updateAdminInlineStatus(incidentId, newStatus) {
 
 async function updateAdminInlineSeverity(incidentId, newSeverity) {
   try {
-    await fetchAPI('/incidents/update-severity', {
+    await fetchAPI('/incidents/edit', {
       method: 'POST',
       body: { id: incidentId, severity: newSeverity }
     });
 
-    showToast('Severity Overridden', `Report #${incidentId} severity set to '${newSeverity}'`, 'success');
+    showToast('Severity Updated', `Report #${incidentId} severity set to '${newSeverity}'`, 'success');
 
     const item = adminReportsList.find(d => d.id === incidentId);
     if (item) item.severity = newSeverity;
@@ -1822,18 +1793,32 @@ async function updateAdminInlineSeverity(incidentId, newSeverity) {
 }
 
 function openAdminEditModal(incidentId) {
-  const item = adminReportsList.find(d => d.id === incidentId);
-  if (!item) return;
+  let item = adminReportsList.find(d => d.id === incidentId);
+  if (!item && typeof liveReportsList !== 'undefined') {
+    item = liveReportsList.find(d => d.id === incidentId);
+  }
+  if (!item) {
+    fetchAPI(`/incidents/${incidentId}`).then(res => {
+      const fetched = res.data || res;
+      if (fetched) populateAndOpenAdminEdit(fetched);
+    }).catch(err => {
+      showToast('Error', 'Could not locate incident details.', 'error');
+    });
+    return;
+  }
+  populateAndOpenAdminEdit(item);
+}
 
+function populateAndOpenAdminEdit(item) {
+  if (!item) return;
   document.getElementById('adminEditId').value = item.id;
   document.getElementById('adminEditTitle').value = item.title || '';
   document.getElementById('adminEditDescription').value = item.description || '';
-  document.getElementById('adminEditSeverity').value = (item.severity || 'UNVERIFIED').toUpperCase();
+  document.getElementById('adminEditSeverity').value = (item.severity || 'LOW').toUpperCase();
   document.getElementById('adminEditStatus').value = (item.status === 'CANCELLED' ? 'CANCELLED_BY_ADMIN' : item.status) || 'PENDING_VERIFICATION';
-  document.getElementById('adminEditLocationName').value = item.locationName || '';
+  document.getElementById('adminEditLocationName').value = item.locationName || item.location_name || '';
   document.getElementById('adminEditLatitude').value = item.latitude || 13.0827;
   document.getElementById('adminEditLongitude').value = item.longitude || 80.2707;
-
   openModal('adminEditIncidentModal');
 }
 
@@ -1849,53 +1834,18 @@ async function submitAdminEditIncident(e) {
   const longitude = parseFloat(document.getElementById('adminEditLongitude').value);
 
   try {
-    const data = await fetchAPI(`/disasters/${id}`, {
-      method: 'PUT',
-      body: { title, description, severity, status, locationName, latitude, longitude }
+    const data = await fetchAPI('/incidents/edit', {
+      method: 'POST',
+      body: { id, title, description, severity, status, locationName, latitude, longitude }
     });
 
     closeModal('adminEditIncidentModal');
-    showToast('Updated successfully', `Incident #${id} details updated successfully.`, 'success');
+    showToast('Incident Updated', `Incident #${id} details updated successfully.`, 'success');
 
     loadAdminReportsTable();
     loadDisasters();
   } catch (err) {
     showToast('Edit Failed', err.message || 'Failed to update incident.', 'error');
-  }
-}
-
-function promptDeleteIncident(incidentId, title) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
-    showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
-    return;
-  }
-
-  pendingDeleteIncidentId = incidentId;
-  const msgEl = document.getElementById('adminDeleteConfirmMessage');
-  if (msgEl) {
-    msgEl.textContent = `Are you sure you want to delete report #${incidentId} (${title || 'Incident'})? This action will delete the report from live systems.`;
-  }
-  openModal('adminDeleteConfirmModal');
-}
-
-async function executeDeleteIncident() {
-  if (!pendingDeleteIncidentId) return;
-
-  try {
-    await fetchAPI('/incidents/delete', {
-      method: 'POST',
-      body: { id: pendingDeleteIncidentId }
-    });
-
-    closeModal('adminDeleteConfirmModal');
-    showToast('Incident Deleted', `Disaster report #${pendingDeleteIncidentId} deleted successfully.`, 'success');
-
-    pendingDeleteIncidentId = null;
-    loadAdminReportsTable();
-    loadAdminAnalytics();
-    loadDisasters();
-  } catch (err) {
-    showToast('Delete Failed', err.message || 'Failed to delete disaster report.', 'error');
   }
 }
 
@@ -1909,12 +1859,28 @@ let locationPickerContext = 'report';
 let selectedCoords = { lat: 13.0827, lng: 80.2707 };
 let selectedAddress = '';
 
+function showGpsFallbackBanner(msg) {
+  const banner = document.getElementById('locationPickerFallbackBanner');
+  if (banner) {
+    banner.textContent = msg;
+    banner.style.display = 'block';
+  }
+}
+
+function hideGpsFallbackBanner() {
+  const banner = document.getElementById('locationPickerFallbackBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
 function openLocationPicker(context = 'report') {
   locationPickerContext = context;
   openModal('locationPickerModal');
+  hideGpsFallbackBanner();
 
-  let initLat = 13.0827;
-  let initLng = 80.2707;
+  let initLat = currentCoords.latitude || 13.0827;
+  let initLng = currentCoords.longitude || 80.2707;
 
   if (context === 'report') {
     const rLat = parseFloat(document.getElementById('reportLatitude')?.value);
@@ -1928,12 +1894,37 @@ function openLocationPicker(context = 'report') {
     const resLat = parseFloat(document.getElementById('resLatitude')?.value);
     const resLng = parseFloat(document.getElementById('resLongitude')?.value);
     if (!isNaN(resLat) && !isNaN(resLng)) { initLat = resLat; initLng = resLng; }
+  } else if (context === 'home') {
+    const hLat = parseFloat(document.getElementById('regHomeLat')?.value);
+    const hLng = parseFloat(document.getElementById('regHomeLng')?.value);
+    if (!isNaN(hLat) && !isNaN(hLng)) { initLat = hLat; initLng = hLng; }
   }
 
-  selectedCoords = { lat: initLat, lng: initLng };
-  setTimeout(() => {
-    initLocationPickerMap(initLat, initLng);
-  }, 200);
+  // Request high-accuracy mobile GPS if using default coords
+  if (navigator.geolocation && (initLat === 13.0827 && initLng === 80.2707)) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        initLat = pos.coords.latitude;
+        initLng = pos.coords.longitude;
+        currentCoords = { latitude: initLat, longitude: initLng };
+        selectedCoords = { lat: initLat, lng: initLng };
+        hideGpsFallbackBanner();
+        initLocationPickerMap(initLat, initLng);
+      },
+      (err) => {
+        console.warn('Location picker GPS notice:', err.message);
+        showGpsFallbackBanner('⚠️ Location access was denied or timed out. Please click on the map or drag the marker to your location.');
+        selectedCoords = { lat: initLat, lng: initLng };
+        initLocationPickerMap(initLat, initLng);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  } else {
+    selectedCoords = { lat: initLat, lng: initLng };
+    setTimeout(() => {
+      initLocationPickerMap(initLat, initLng);
+    }, 200);
+  }
 }
 
 function initLocationPickerMap(lat, lng) {
@@ -2009,13 +2000,19 @@ function confirmLocationPickerSelection() {
     if (document.getElementById('resAddress') && selectedAddress) {
       document.getElementById('resAddress').value = selectedAddress;
     }
+  } else if (locationPickerContext === 'home') {
+    if (document.getElementById('regHomeLat')) document.getElementById('regHomeLat').value = selectedCoords.lat.toFixed(6);
+    if (document.getElementById('regHomeLng')) document.getElementById('regHomeLng').value = selectedCoords.lng.toFixed(6);
+    if (document.getElementById('regHomeAddress') && selectedAddress) {
+      document.getElementById('regHomeAddress').value = selectedAddress;
+    }
   }
   closeModal('locationPickerModal');
   showToast('Location Selected', `Coordinates set to ${selectedCoords.lat.toFixed(4)}, ${selectedCoords.lng.toFixed(4)}`, 'info');
 }
 
 function promptDeleteIncident(incidentId, title) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
     return;
   }
@@ -2023,7 +2020,7 @@ function promptDeleteIncident(incidentId, title) {
   pendingDeleteIncidentId = incidentId;
   const msgEl = document.getElementById('adminDeleteConfirmMessage');
   if (msgEl) {
-    msgEl.innerHTML = `Are you sure you want to delete report <strong>#${incidentId} (${escapeHtml(title)})</strong>?<br><br>This action will delete the report from live systems.`;
+    msgEl.innerHTML = `Are you sure you want to delete report <strong>#${incidentId} (${escapeHtml(title || 'Incident')})</strong>?<br><br>This will permanently remove the record from live systems.`;
   }
   openModal('adminDeleteConfirmModal');
 }
@@ -2039,8 +2036,8 @@ async function executeDeleteIncident() {
 
   try {
     await fetchAPI('/incidents/delete', {
-      method: 'DELETE',
-      body: { incidentId: pendingDeleteIncidentId }
+      method: 'POST',
+      body: { id: pendingDeleteIncidentId, incidentId: pendingDeleteIncidentId }
     });
 
     closeModal('adminDeleteConfirmModal');
@@ -2051,7 +2048,7 @@ async function executeDeleteIncident() {
     loadAdminAnalytics();
     loadDisasters();
   } catch (err) {
-    showToast('Delete Failed', err.message || 'Failed to delete report. Try again.', 'error');
+    showToast('Delete Failed', err.message || 'Failed to delete report.', 'error');
   } finally {
     if (confirmBtn) {
       confirmBtn.disabled = false;
@@ -2060,8 +2057,88 @@ async function executeDeleteIncident() {
   }
 }
 
-let pendingUsersListCache = [];
-let pendingUsersPage = 1;
+function promptDeleteAllIncidents() {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
+    showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
+    return;
+  }
+  openModal('adminDeleteAllIncidentsModal');
+}
+
+async function executeDeleteAllIncidents() {
+  const btn = document.getElementById('confirmDeleteAllIncidentsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+  try {
+    const data = await fetchAPI('/admin/reset-data?target=disasters', {
+      method: 'POST',
+      body: { target: 'disasters' }
+    });
+    closeModal('adminDeleteAllIncidentsModal');
+    showToast('All Disasters Deleted', 'All disaster reports have been cleared from live systems.', 'success');
+    loadAdminData();
+    loadDisasters();
+  } catch (err) {
+    showToast('Deletion Failed', err.message || 'Failed to delete all disasters.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Yes, Delete All Disasters'; }
+  }
+}
+
+function promptDeleteAllResources() {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
+    showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
+    return;
+  }
+  openModal('adminDeleteAllResourcesModal');
+}
+
+async function executeDeleteAllResources() {
+  const btn = document.getElementById('confirmDeleteAllResourcesBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+  try {
+    const data = await fetchAPI('/admin/reset-data?target=resources', {
+      method: 'POST',
+      body: { target: 'resources' }
+    });
+    closeModal('adminDeleteAllResourcesModal');
+    showToast('All Resources Deleted', 'All emergency resource posts have been cleared.', 'success');
+    loadAdminResourcesTable();
+    loadResources();
+    loadAdminAnalytics();
+  } catch (err) {
+    showToast('Deletion Failed', err.message || 'Failed to delete all resources.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Yes, Delete All Resources'; }
+  }
+}
+
+function promptResetSystemData() {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
+    showToast('Access Denied', 'Only administrators can perform system reset.', 'error');
+    return;
+  }
+  openModal('adminResetSystemModal');
+}
+
+async function executeResetSystemData() {
+  const btn = document.getElementById('confirmResetSystemBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
+  try {
+    const data = await fetchAPI('/admin/reset-system?target=all', {
+      method: 'POST',
+      body: { target: 'all' }
+    });
+    closeModal('adminResetSystemModal');
+    showToast('System Reset Complete', 'All operational test data has been safely cleared.', 'success');
+    loadAdminData();
+    loadDisasters();
+    loadResources();
+  } catch (err) {
+    showToast('Reset Failed', err.message || 'System reset failed.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm System Reset'; }
+  }
+}
 
 async function loadAdminPendingUsers() {
   const container = document.getElementById('adminPendingUsersList');
@@ -2069,65 +2146,30 @@ async function loadAdminPendingUsers() {
 
   try {
     const data = await fetchAPI('/admin/pending-users');
-    pendingUsersListCache = data.data || [];
-    renderAdminPendingUsers();
+    const list = data.data || [];
+    if (list.length === 0) {
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No organizations pending approval.</p>`;
+      return;
+    }
+
+    container.innerHTML = list.map(u => `
+      <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong>🏢 ${escapeHtml(u.organizationName || u.name)}</strong>
+          <span class="badge badge-ngo">${u.role}</span>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
+          Contact: <strong>${escapeHtml(u.name)}</strong> (${escapeHtml(u.phone)}) | Reg No: ${escapeHtml(u.organizationRegNo || 'N/A')}
+        </div>
+        <div style="margin-top: 8px; display: flex; gap: 8px;">
+          <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED')">✓ Approve Account</button>
+          <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED')">✕ Reject</button>
+        </div>
+      </div>
+    `).join('');
   } catch (err) {
     handleApiError(err);
   }
-}
-
-function renderAdminPendingUsers() {
-  const container = document.getElementById('adminPendingUsersList');
-  if (!container) return;
-
-  if (pendingUsersListCache.length === 0) {
-    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No organizations pending approval.</p>`;
-    return;
-  }
-
-  const listPageSize = 10;
-  const total = pendingUsersListCache.length;
-  const totalPages = Math.ceil(total / listPageSize) || 1;
-  if (pendingUsersPage > totalPages) pendingUsersPage = totalPages;
-  if (pendingUsersPage < 1) pendingUsersPage = 1;
-
-  const startIdx = (pendingUsersPage - 1) * listPageSize;
-  const pageItems = pendingUsersListCache.slice(startIdx, startIdx + listPageSize);
-
-  const itemsHtml = pageItems.map(u => `
-    <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <strong>🏢 ${escapeHtml(u.organizationName || u.name)}</strong>
-        <span class="badge badge-ngo">${u.role}</span>
-      </div>
-      <div style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">
-        Contact: <strong>${escapeHtml(u.name)}</strong> (${escapeHtml(u.phone)}) | Reg No: ${escapeHtml(u.organizationRegNo || 'N/A')}
-      </div>
-      <div style="margin-top: 8px; display: flex; gap: 8px;">
-        <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED')">✓ Approve Account</button>
-        <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED')">✕ Reject</button>
-      </div>
-    </div>
-  `).join('');
-
-  container.innerHTML = `
-    <div class="fixed-scroll-container" style="max-height: 320px;">
-      ${itemsHtml}
-    </div>
-    <div class="custom-pagination-bar">
-      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} pending</span>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="changePendingUsersPage(-1)" ${pendingUsersPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
-        <span style="font-weight: 700;">Page ${pendingUsersPage} of ${totalPages}</span>
-        <button class="btn btn-outline btn-sm" onclick="changePendingUsersPage(1)" ${pendingUsersPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
-      </div>
-    </div>
-  `;
-}
-
-function changePendingUsersPage(delta) {
-  pendingUsersPage += delta;
-  renderAdminPendingUsers();
 }
 
 async function adminApproveUser(userId, action) {
@@ -2149,49 +2191,23 @@ async function adminApproveUser(userId, action) {
   }
 }
 
-let pendingDisastersListCache = [];
-let pendingDisastersPage = 1;
-
 async function loadAdminPendingDisasters() {
   const container = document.getElementById('adminPendingDisastersList');
   if (!container) return;
 
   try {
     const data = await fetchAPI('/admin/pending-disasters');
-    pendingDisastersListCache = data.data || [];
-    renderAdminPendingDisasters();
-  } catch (err) {
-    handleApiError(err);
-  }
-}
+    const list = data.data || [];
+    if (list.length === 0) {
+      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>`;
+      return;
+    }
 
-function renderAdminPendingDisasters() {
-  const container = document.getElementById('adminPendingDisastersList');
-  if (!container) return;
-
-  if (pendingDisastersListCache.length === 0) {
-    container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No pending citizen reports.</p>`;
-    return;
-  }
-
-  const listPageSize = 10;
-  const total = pendingDisastersListCache.length;
-  const totalPages = Math.ceil(total / listPageSize) || 1;
-  if (pendingDisastersPage > totalPages) pendingDisastersPage = totalPages;
-  if (pendingDisastersPage < 1) pendingDisastersPage = 1;
-
-  const startIdx = (pendingDisastersPage - 1) * listPageSize;
-  const pageItems = pendingDisastersListCache.slice(startIdx, startIdx + listPageSize);
-
-  const itemsHtml = pageItems.map(d => {
-    const mlSev = (d.ml_severity || d.mlSeverity || d.severity || 'MEDIUM').toUpperCase();
-    return `
+    container.innerHTML = list.map(d => `
       <div style="border-bottom: 1px solid var(--border); padding: 12px 0;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <strong>🚨 [${d.type}] ${escapeHtml(d.title)}</strong>
-          <div style="display: flex; gap: 4px; align-items: center;">
-            <span class="badge badge-${mlSev.toLowerCase()}">🤖 ${mlSev}</span>
-          </div>
+          <span class="badge badge-${d.severity.toLowerCase()}">${d.severity}</span>
         </div>
         <p style="font-size: 0.85rem; margin: 4px 0;">${escapeHtml(d.description)}</p>
         <div style="font-size: 0.8rem; color: var(--text-muted);">
@@ -2202,27 +2218,10 @@ function renderAdminPendingDisasters() {
           <button class="btn btn-outline btn-sm" onclick="adminApproveDisaster(${d.id}, 'REJECTED')">✕ Close</button>
         </div>
       </div>
-    `;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="fixed-scroll-container" style="max-height: 320px;">
-      ${itemsHtml}
-    </div>
-    <div class="custom-pagination-bar">
-      <span>Showing ${startIdx + 1}-${Math.min(startIdx + listPageSize, total)} of ${total} pending</span>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <button class="btn btn-outline btn-sm" onclick="changePendingDisastersPage(-1)" ${pendingDisastersPage <= 1 ? 'disabled' : ''}>◀ Prev</button>
-        <span style="font-weight: 700;">Page ${pendingDisastersPage} of ${totalPages}</span>
-        <button class="btn btn-outline btn-sm" onclick="changePendingDisastersPage(1)" ${pendingDisastersPage >= totalPages ? 'disabled' : ''}>Next ▶</button>
-      </div>
-    </div>
-  `;
-}
-
-function changePendingDisastersPage(delta) {
-  pendingDisastersPage += delta;
-  renderAdminPendingDisasters();
+    `).join('');
+  } catch (err) {
+    handleApiError(err);
+  }
 }
 
 async function adminApproveDisaster(disasterId, action) {
@@ -2292,67 +2291,4 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
-}
-
-// ==============================================================================
-// 13. MASTER RESET SYSTEM (DOUBLE LEVEL VERIFICATION)
-// ==============================================================================
-
-function promptMasterResetStep1() {
-  if (!currentUser || !isAdminUser(currentUser)) {
-    showToast('Access Denied', 'Only administrators can trigger system reset.', 'error');
-    return;
-  }
-  openModal('masterResetStep1Modal');
-}
-
-function handleMasterResetStep1Continue() {
-  closeModal('masterResetStep1Modal');
-  const textInput = document.getElementById('masterResetTextInput');
-  const submitBtn = document.getElementById('masterResetSubmitBtn');
-  if (textInput) {
-    textInput.value = '';
-    textInput.oninput = (e) => {
-      const val = (e.target.value || '').trim();
-      if (submitBtn) submitBtn.disabled = (val !== 'CONFIRM');
-    };
-  }
-  if (submitBtn) submitBtn.disabled = true;
-  openModal('masterResetStep2Modal');
-}
-
-async function handleMasterResetStep2Submit(e) {
-  e.preventDefault();
-  const textVal = (document.getElementById('masterResetTextInput')?.value || '').trim();
-  if (textVal !== 'CONFIRM') {
-    showToast('Verification Required', 'Please type CONFIRM to proceed.', 'warning');
-    return;
-  }
-
-  const submitBtn = document.getElementById('masterResetSubmitBtn');
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Resetting System...';
-  }
-
-  try {
-    const data = await fetchAPI('/admin/reset-system', {
-      method: 'POST',
-      body: {}
-    });
-
-    closeModal('masterResetStep2Modal');
-    showToast('System reset completed successfully', data.message || 'System reset completed successfully', 'success');
-
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
-  } catch (err) {
-    showToast('Reset Failed', err.message || 'Failed to reset system data.', 'error');
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'CONFIRM DELETE';
-    }
-  }
 }

@@ -30,6 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
   registerServiceWorker();
   restoreSession();
 
+  // Initialize iOS Liquid Glass Role Slider
+  setTimeout(updateLiquidSlider, 60);
+  window.addEventListener('resize', () => updateLiquidSlider(), { passive: true });
+
   // Requirement 8: Real-time 10s periodic polling fallback sync
   setInterval(() => {
     if (currentUser && currentUser.approved) {
@@ -406,10 +410,41 @@ function populateFormCoords(lat, lon) {
 // 6. STRICT MANUAL AUTHENTICATION (PHONE + PASSWORD)
 // ==============================================================================
 
+function updateLiquidSlider(btnEl) {
+  const slider = document.getElementById('liquidRoleSlider');
+  const container = document.getElementById('loginRoleTabs');
+  if (!slider || !container) return;
+  const target = btnEl || container.querySelector('.role-tab-item.active') || container.querySelector('.role-tab-item');
+  if (!target) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const left = targetRect.left - containerRect.left;
+  slider.style.transform = `translateX(${left}px)`;
+  slider.style.width = `${targetRect.width}px`;
+}
+
 function selectLoginRole(role, btnEl) {
   selectedLoginRole = role;
   document.querySelectorAll('#loginRoleTabs .role-tab-item').forEach(btn => btn.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
+
+  // Smooth liquid slider transition
+  updateLiquidSlider(btnEl);
+
+  // Dynamic context hint update
+  const roleHints = {
+    USER: { icon: '👤', text: 'Citizen Reporting & Public Safety Network' },
+    VOLUNTEER: { icon: '🦺', text: 'On-ground Mission Response & Task Force' },
+    NGO: { icon: '👥', text: 'Relief Logistics & Resource Aid Distribution' },
+    GOVERNMENT_AGENCY: { icon: '🏛️', text: 'Disaster Authority & Official Intervention' },
+    ADMIN: { icon: '⚙️', text: 'System Governance & Verification Center' }
+  };
+
+  const hintInfo = roleHints[role] || roleHints.USER;
+  const hintIconEl = document.getElementById('roleHintIcon');
+  const hintTextEl = document.getElementById('roleHintText');
+  if (hintIconEl) hintIconEl.textContent = hintInfo.icon;
+  if (hintTextEl) hintTextEl.textContent = hintInfo.text;
 
   const phoneInput = document.getElementById('landingLoginPhone');
   const passInput = document.getElementById('landingLoginPassword');
@@ -420,6 +455,23 @@ function selectLoginRole(role, btnEl) {
   if (alertBox) alertBox.innerHTML = '';
 
   handleLoginInputChange();
+}
+
+function toggleLoginPasswordVisibility() {
+  const passInput = document.getElementById('landingLoginPassword');
+  const iconEl = document.getElementById('passwordVisibilityIcon');
+  if (!passInput) return;
+  if (passInput.type === 'password') {
+    passInput.type = 'text';
+    if (iconEl) {
+      iconEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    }
+  } else {
+    passInput.type = 'password';
+    if (iconEl) {
+      iconEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    }
+  }
 }
 
 function handleLoginInputChange() {
@@ -488,6 +540,18 @@ function showDashboardApp() {
   document.getElementById('mainDashboardApp').style.display = 'flex';
 }
 
+function hasAdminPrivileges(user) {
+  if (!user) return false;
+  const allowed = ['ADMIN', 'SUPER_ADMIN', 'GOVERNMENT', 'GOVERNMENT_AGENCY'];
+  if (typeof user.role === 'string' && allowed.includes(user.role.trim().toUpperCase())) {
+    return true;
+  }
+  if (Array.isArray(user.roles)) {
+    return user.roles.some(r => typeof r === 'string' && allowed.includes(r.trim().toUpperCase()));
+  }
+  return false;
+}
+
 function updateUserUI() {
   const roleBadge = document.getElementById('userBadgeRole');
   const nameDisp = document.getElementById('userNameDisplay');
@@ -498,7 +562,7 @@ function updateUserUI() {
     roleBadge.className = `badge badge-${currentUser.role.toLowerCase().replace('_', '')}`;
     nameDisp.textContent = currentUser.name + (currentUser.organizationName ? ` (${currentUser.organizationName})` : '');
 
-    if (currentUser.role === 'ADMIN') {
+    if (hasAdminPrivileges(currentUser)) {
       adminNav.style.display = 'block';
     } else {
       adminNav.style.display = 'none';
@@ -596,6 +660,16 @@ async function handleLandingLogin(e) {
     if (spinner) spinner.style.display = 'none';
     if (btnText) btnText.textContent = 'Login ➔';
   }
+}
+
+
+
+
+function updateRoleBadge(roleTitle, roleDesc) {
+  const badge = document.getElementById('role-badge');
+  const desc = document.getElementById('role-description');
+  if (badge) badge.textContent = roleTitle;
+  if (desc) desc.textContent = roleDesc;
 }
 
 async function handleRegister(e) {
@@ -1317,7 +1391,7 @@ let adminSearchDebounceTimer = null;
 let pendingDeleteIncidentId = null;
 
 async function loadAdminData() {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showAccessDeniedView();
     return;
   }
@@ -1490,7 +1564,7 @@ async function submitAdminEditResource(e) {
 }
 
 function promptDeleteResource(resId, name) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can delete resource posts.', 'error');
     return;
   }
@@ -1719,18 +1793,32 @@ async function updateAdminInlineSeverity(incidentId, newSeverity) {
 }
 
 function openAdminEditModal(incidentId) {
-  const item = adminReportsList.find(d => d.id === incidentId);
-  if (!item) return;
+  let item = adminReportsList.find(d => d.id === incidentId);
+  if (!item && typeof liveReportsList !== 'undefined') {
+    item = liveReportsList.find(d => d.id === incidentId);
+  }
+  if (!item) {
+    fetchAPI(`/incidents/${incidentId}`).then(res => {
+      const fetched = res.data || res;
+      if (fetched) populateAndOpenAdminEdit(fetched);
+    }).catch(err => {
+      showToast('Error', 'Could not locate incident details.', 'error');
+    });
+    return;
+  }
+  populateAndOpenAdminEdit(item);
+}
 
+function populateAndOpenAdminEdit(item) {
+  if (!item) return;
   document.getElementById('adminEditId').value = item.id;
   document.getElementById('adminEditTitle').value = item.title || '';
   document.getElementById('adminEditDescription').value = item.description || '';
-  document.getElementById('adminEditSeverity').value = (item.severity || 'UNVERIFIED').toUpperCase();
+  document.getElementById('adminEditSeverity').value = (item.severity || 'LOW').toUpperCase();
   document.getElementById('adminEditStatus').value = (item.status === 'CANCELLED' ? 'CANCELLED_BY_ADMIN' : item.status) || 'PENDING_VERIFICATION';
-  document.getElementById('adminEditLocationName').value = item.locationName || '';
+  document.getElementById('adminEditLocationName').value = item.locationName || item.location_name || '';
   document.getElementById('adminEditLatitude').value = item.latitude || 13.0827;
   document.getElementById('adminEditLongitude').value = item.longitude || 80.2707;
-
   openModal('adminEditIncidentModal');
 }
 
@@ -1761,8 +1849,6 @@ async function submitAdminEditIncident(e) {
   }
 }
 
-
-
 // ==============================================================================
 // LEAFLET MAP LOCATION PICKER & REVERSE GEOCODING
 // ==============================================================================
@@ -1773,12 +1859,28 @@ let locationPickerContext = 'report';
 let selectedCoords = { lat: 13.0827, lng: 80.2707 };
 let selectedAddress = '';
 
+function showGpsFallbackBanner(msg) {
+  const banner = document.getElementById('locationPickerFallbackBanner');
+  if (banner) {
+    banner.textContent = msg;
+    banner.style.display = 'block';
+  }
+}
+
+function hideGpsFallbackBanner() {
+  const banner = document.getElementById('locationPickerFallbackBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
 function openLocationPicker(context = 'report') {
   locationPickerContext = context;
   openModal('locationPickerModal');
+  hideGpsFallbackBanner();
 
-  let initLat = 13.0827;
-  let initLng = 80.2707;
+  let initLat = currentCoords.latitude || 13.0827;
+  let initLng = currentCoords.longitude || 80.2707;
 
   if (context === 'report') {
     const rLat = parseFloat(document.getElementById('reportLatitude')?.value);
@@ -1798,10 +1900,31 @@ function openLocationPicker(context = 'report') {
     if (!isNaN(hLat) && !isNaN(hLng)) { initLat = hLat; initLng = hLng; }
   }
 
-  selectedCoords = { lat: initLat, lng: initLng };
-  setTimeout(() => {
-    initLocationPickerMap(initLat, initLng);
-  }, 200);
+  // Request high-accuracy mobile GPS if using default coords
+  if (navigator.geolocation && (initLat === 13.0827 && initLng === 80.2707)) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        initLat = pos.coords.latitude;
+        initLng = pos.coords.longitude;
+        currentCoords = { latitude: initLat, longitude: initLng };
+        selectedCoords = { lat: initLat, lng: initLng };
+        hideGpsFallbackBanner();
+        initLocationPickerMap(initLat, initLng);
+      },
+      (err) => {
+        console.warn('Location picker GPS notice:', err.message);
+        showGpsFallbackBanner('⚠️ Location access was denied or timed out. Please click on the map or drag the marker to your location.');
+        selectedCoords = { lat: initLat, lng: initLng };
+        initLocationPickerMap(initLat, initLng);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  } else {
+    selectedCoords = { lat: initLat, lng: initLng };
+    setTimeout(() => {
+      initLocationPickerMap(initLat, initLng);
+    }, 200);
+  }
 }
 
 function initLocationPickerMap(lat, lng) {
@@ -1889,7 +2012,7 @@ function confirmLocationPickerSelection() {
 }
 
 function promptDeleteIncident(incidentId, title) {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can delete disaster reports.', 'error');
     return;
   }
@@ -1935,7 +2058,7 @@ async function executeDeleteIncident() {
 }
 
 function promptDeleteAllIncidents() {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
     return;
   }
@@ -1962,7 +2085,7 @@ async function executeDeleteAllIncidents() {
 }
 
 function promptDeleteAllResources() {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can perform bulk deletions.', 'error');
     return;
   }
@@ -1990,7 +2113,7 @@ async function executeDeleteAllResources() {
 }
 
 function promptResetSystemData() {
-  if (!currentUser || currentUser.role !== 'ADMIN') {
+  if (!currentUser || !hasAdminPrivileges(currentUser)) {
     showToast('Access Denied', 'Only administrators can perform system reset.', 'error');
     return;
   }
