@@ -46,4 +46,66 @@ public final class GeoLocationUtil {
         }
         return String.format("%.2f km", distanceKm);
     }
+
+    /**
+     * Represents a geographical bounding box defined by min/max latitude and longitude.
+     */
+    public static class BoundingBox {
+        private final double minLat;
+        private final double maxLat;
+        private final double minLon;
+        private final double maxLon;
+
+        public BoundingBox(double minLat, double maxLat, double minLon, double maxLon) {
+            this.minLat = minLat;
+            this.maxLat = maxLat;
+            this.minLon = minLon;
+            this.maxLon = maxLon;
+        }
+
+        public double getMinLat() { return minLat; }
+        public double getMaxLat() { return maxLat; }
+        public double getMinLon() { return minLon; }
+        public double getMaxLon() { return maxLon; }
+
+        @Override
+        public String toString() {
+            return String.format("BoundingBox[lat: [%.4f, %.4f], lon: [%.4f, %.4f]]", minLat, maxLat, minLon, maxLon);
+        }
+    }
+
+    /**
+     * Calculates an optimized spatial bounding box around a center coordinate given a radius in kilometers.
+     * Used for fast indexed database queries (avoiding full table scans).
+     *
+     * @param lat Center latitude
+     * @param lon Center longitude
+     * @param radiusKm Search radius in km
+     * @return BoundingBox with min/max latitude and longitude
+     */
+    public static BoundingBox calculateBoundingBox(double lat, double lon, double radiusKm) {
+        double radLat = Math.toRadians(lat);
+        double radDist = radiusKm / EARTH_RADIUS_KM;
+
+        double minLat = Math.toDegrees(radLat - radDist);
+        double maxLat = Math.toDegrees(radLat + radDist);
+
+        double minLon;
+        double maxLon;
+
+        // Check if bounding box covers the poles
+        if (minLat > -90.0 && maxLat < 90.0) {
+            double deltaLon = Math.toDegrees(Math.asin(Math.sin(radDist) / Math.cos(radLat)));
+            minLon = lon - deltaLon;
+            maxLon = lon + deltaLon;
+        } else {
+            // Near poles: cover full longitude range
+            minLat = Math.max(minLat, -90.0);
+            maxLat = Math.min(maxLat, 90.0);
+            minLon = -180.0;
+            maxLon = 180.0;
+        }
+
+        return new BoundingBox(minLat, maxLat, minLon, maxLon);
+    }
 }
