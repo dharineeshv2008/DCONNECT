@@ -89,27 +89,41 @@ public class ApiClient {
 
     private static void tryGetLocationAndSend(Context context, String fcmToken, String userId) {
         boolean hasLocation = ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
 
         if (hasLocation) {
             FusedLocationProviderClient locationClient =
                     LocationServices.getFusedLocationProviderClient(context);
 
-            locationClient.getLastLocation()
+            com.google.android.gms.tasks.CancellationTokenSource cts = new com.google.android.gms.tasks.CancellationTokenSource();
+
+            locationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, cts.getToken())
                     .addOnSuccessListener(location -> {
                         if (location != null) {
+                            Log.i(TAG, "📍 Real GPS location fetched: " + location.getLatitude() + ", " + location.getLongitude());
                             executor.submit(() ->
                                     doPostSaveToken(context, userId, fcmToken,
                                             String.valueOf(location.getLatitude()),
                                             String.valueOf(location.getLongitude())));
                         } else {
-                            Log.w(TAG, "📍 GPS location unavailable — sending token without coordinates");
-                            executor.submit(() ->
-                                    doPostSaveToken(context, userId, fcmToken, "", ""));
+                            Log.w(TAG, "📍 getCurrentLocation returned null, falling back to getLastLocation()");
+                            locationClient.getLastLocation().addOnSuccessListener(lastLoc -> {
+                                if (lastLoc != null) {
+                                    executor.submit(() ->
+                                            doPostSaveToken(context, userId, fcmToken,
+                                                    String.valueOf(lastLoc.getLatitude()),
+                                                    String.valueOf(lastLoc.getLongitude())));
+                                } else {
+                                    Log.w(TAG, "📍 Cached location also null — sending token without coordinates");
+                                    executor.submit(() -> doPostSaveToken(context, userId, fcmToken, "", ""));
+                                }
+                            }).addOnFailureListener(e -> executor.submit(() -> doPostSaveToken(context, userId, fcmToken, "", "")));
                         }
                     })
                     .addOnFailureListener(e -> {
-                        Log.w(TAG, "📍 GPS lookup failed: " + e.getMessage());
+                        Log.w(TAG, "📍 High accuracy GPS lookup failed: " + e.getMessage());
                         executor.submit(() ->
                                 doPostSaveToken(context, userId, fcmToken, "", ""));
                     });

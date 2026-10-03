@@ -24,6 +24,7 @@ public class TokenController {
 
     private static final Logger log = LoggerFactory.getLogger(TokenController.class);
     private final UserRepository userRepository;
+    private final FcmNotificationService fcmNotificationService;
 
     @PostMapping("/save-token")
     public ResponseEntity<ApiResponse<Map<String, Object>>> saveToken(@RequestBody SaveTokenRequest request) {
@@ -70,12 +71,30 @@ public class TokenController {
             });
         }
 
+        // Trigger immediate test push notification ("Hi - Notifications working")
+        boolean testPushSent = false;
+        try {
+            com.disaster.coord.dto.FcmNotificationPayload testPayload = com.disaster.coord.dto.FcmNotificationPayload.builder()
+                    .fcmToken(request.getFcmToken())
+                    .title("Hi - Notifications working")
+                    .body("Your device is registered for emergency disaster alerts.")
+                    .disasterType("TEST_ALERT")
+                    .address(lat != null && lng != null ? String.format("(%.4f, %.4f)", lat, lng) : "Registered Location")
+                    .distanceKm(0.0)
+                    .customData(Map.of("type", "WELCOME_TEST", "clickAction", "OPEN_DISASTER_ALERT"))
+                    .build();
+            testPushSent = fcmNotificationService.sendNotification(testPayload);
+        } catch (Exception ex) {
+            log.warn("Failed to dispatch test FCM notification: {}", ex.getMessage());
+        }
+
         Map<String, Object> data = new HashMap<>();
         data.put("userId", request.getUserId());
         data.put("fcmToken", request.getFcmToken());
         data.put("latitude", lat);
         data.put("longitude", lng);
         data.put("status", "REGISTERED");
+        data.put("testNotificationSent", testPushSent);
 
         return ResponseEntity.ok(ApiResponse.ok("FCM Token and Location saved successfully", data));
     }

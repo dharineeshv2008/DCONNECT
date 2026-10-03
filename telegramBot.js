@@ -9,10 +9,67 @@ const { supabaseDb } = require('./supabaseClient');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8778978825:AAFoTE5ixdli9HGYVpyArQOIZ-vc7Pkpps4';
 let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '6868121119';
 
-let pollingInterval = null;
+class TtlMap {
+  constructor(ttlMs = 3600000) {
+    this.ttlMs = ttlMs;
+    this.map = new Map();
+  }
+  set(key, value) {
+    this.map.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+    this.cleanup();
+  }
+  get(key) {
+    const item = this.map.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expiresAt) {
+      this.map.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+  has(key) {
+    return this.get(key) !== null;
+  }
+  cleanup() {
+    const now = Date.now();
+    for (const [k, v] of this.map.entries()) {
+      if (now > v.expiresAt) this.map.delete(k);
+    }
+  }
+}
+
+class TtlSet {
+  constructor(ttlMs = 3600000) {
+    this.ttlMs = ttlMs;
+    this.map = new Map();
+  }
+  add(key) {
+    this.map.set(key, Date.now() + this.ttlMs);
+    this.cleanup();
+  }
+  has(key) {
+    const expiresAt = this.map.get(key);
+    if (!expiresAt) return false;
+    if (Date.now() > expiresAt) {
+      this.map.delete(key);
+      return false;
+    }
+    return true;
+  }
+  cleanup() {
+    const now = Date.now();
+    for (const [k, v] of this.map.entries()) {
+      if (now > v) this.map.delete(k);
+    }
+  }
+}
+
+let pollingActive = false;
+let pollingTimeout = null;
+let consecutiveErrors = 0;
 let lastUpdateId = 0;
-const incidentTelegramMessages = new Map();
-const handledCallbackIds = new Set();
+const incidentTelegramMessages = new TtlMap(24 * 3600000); // 24hr TTL
+const handledCallbackIds = new TtlSet(1 * 3600000); // 1hr TTL
 
 function getTelegramBotHealth() {
   return {
@@ -511,37 +568,64 @@ async function handleTelegramWebhook(req, res) {
   return sendJsonResponse(res, statusCode, result);
 }
 
+function scheduleNextPoll(delayMs = 1500) {
+  if (!pollingActive) return;
+  if (pollingTimeout) clearTimeout(pollingTimeout);
+  pollingTimeout = setTimeout(executePollStep, delayMs);
+}
+
+async function executePollStep() {
+  if (!pollingActive) return;
+  try {
+    const res = await callTelegramApi('getUpdates', {
+      offset: lastUpdateId + 1,
+      timeout: 2,
+      allowed_updates: ['message', 'callback_query']
+    });
+
+    if (res && res.ok && Array.isArray(res.result)) {
+      consecutiveErrors = 0;
+      for (const update of res.result) {
+        lastUpdateId = Math.max(lastUpdateId, update.update_id);
+        await processTelegramUpdate(update);
+      }
+    } else if (res && !res.ok) {
+      consecutiveErrors++;
+      console.warn(`[Telegram Bot]: API returned non-OK response (count ${consecutiveErrors}):`, res.description);
+    }
+    scheduleNextPoll(consecutiveErrors > 0 ? Math.min(30000, consecutiveErrors * 3000) : 1500);
+  } catch (err) {
+    consecutiveErrors++;
+    console.warn(`[Telegram Bot]: Polling error (count ${consecutiveErrors}):`, err.message);
+    scheduleNextPoll(Math.min(30000, consecutiveErrors * 4000));
+  }
+}
+
 /**
- * Start long-polling loop for local development environment
+ * Start long-polling loop with managed recursion and 24h auto-restart watchdog
  */
 function startPollingLoop() {
-  if (pollingInterval) return;
+  if (pollingActive) return;
+  pollingActive = true;
 
   // Clear any active webhooks so getUpdates works in local mode
   callTelegramApi('deleteWebhook', { drop_pending_updates: false })
     .then(() => {
-      console.log('🤖 [Telegram Bot]: Polling mode enabled for local server.');
+      console.log('🤖 [Telegram Bot]: Polling mode enabled with automatic backoff & TTL eviction.');
     })
     .catch(err => console.warn('Telegram deleteWebhook warning:', err.message));
 
-  pollingInterval = setInterval(async () => {
-    try {
-      const res = await callTelegramApi('getUpdates', {
-        offset: lastUpdateId + 1,
-        timeout: 1,
-        allowed_updates: ['message', 'callback_query']
-      });
+  executePollStep();
 
-      if (res && res.ok && Array.isArray(res.result) && res.result.length > 0) {
-        for (const update of res.result) {
-          lastUpdateId = Math.max(lastUpdateId, update.update_id);
-          await processTelegramUpdate(update);
-        }
-      }
-    } catch (err) {
-      // Ignore network hiccup logs during polling
-    }
-  }, 2500);
+  // 24-Hour Auto-Restart Safeguard to prevent silent polling decay
+  setTimeout(() => {
+    console.log('🔄 [Telegram Bot]: Performing scheduled 24-hour polling loop recycle...');
+    pollingActive = false;
+    if (pollingTimeout) clearTimeout(pollingTimeout);
+    setTimeout(() => {
+      startPollingLoop();
+    }, 2000);
+  }, 24 * 3600 * 1000);
 }
 
 /**
