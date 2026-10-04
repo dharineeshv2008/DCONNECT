@@ -166,12 +166,13 @@
     <p>Generate, copy, and register your browser or mobile device's <strong>REAL Firebase Cloud Messaging (FCM)</strong> token.</p>
 
     <div class="form-group">
-      <label>Web Push Certificate VAPID Key (Optional / Required for Web Push):</label>
-      <input type="text" id="vapidKeyInput" placeholder="Firebase Console → Project Settings → Cloud Messaging → Web Push certificates VAPID Key">
+      <label>Web Push Certificate VAPID Key:</label>
+      <input type="text" id="vapidKeyInput" value="BNrRMrYqxOMtKNRDlOgVt4XHgkIf2NE5XITsHuw5yKa1y63CGeFfbpVv8UHtdAEX89zjBQpgjAuZyvzkMpN1n20">
     </div>
 
     <div class="actions">
-      <button class="btn" onclick="generateFCMToken()">🚀 Generate Real FCM Token</button>
+      <button class="btn" onclick="generateFCMToken()">🚀 Get FCM Token</button>
+      <button class="btn" style="background: #22c55e; color: #000;" onclick="sendTestPushFromUI()">📢 Send Test Notification ("Hi")</button>
       <button class="btn" style="background: #475569; color: #fff;" onclick="copyToken()">📋 Copy Token</button>
     </div>
 
@@ -180,7 +181,7 @@
         <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">REAL FCM REGISTRATION TOKEN (<span id="tokenLength">0</span> chars)</span>
         <span id="statusBadge" class="status-badge">NOT GENERATED</span>
       </div>
-      <textarea id="fcmTokenDisplay" readonly placeholder="Click 'Generate Real FCM Token' to request permission and retrieve token..."></textarea>
+      <textarea id="fcmTokenDisplay" readonly placeholder="Click 'Get FCM Token' to request permission and retrieve token..."></textarea>
     </div>
 
     <div class="log-panel" id="logPanel">
@@ -199,6 +200,8 @@
       appId: "1:454830688911:web:7f61c3a1059f81d6862708"
     };
 
+    const VAPID_KEY = "BNrRMrYqxOMtKNRDlOgVt4XHgkIf2NE5XITsHuw5yKa1y63CGeFfbpVv8UHtdAEX89zjBQpgjAuZyvzkMpN1n20";
+
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const messaging = firebase.messaging();
@@ -210,15 +213,18 @@
       panel.scrollTop = panel.scrollHeight;
     }
 
-    // Register Service Worker
-    let swRegistration = null;
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(reg => {
-          swRegistration = reg;
-          logMessage('✅ Service Worker registered: ' + reg.scope);
-        })
-        .catch(err => logMessage('⚠️ SW Register Notice: ' + err.message));
+    async function ensureServiceWorkerRegistered() {
+      if (!('serviceWorker' in navigator)) return null;
+      try {
+        logMessage('⚙️ Registering /firebase-messaging-sw.js...');
+        const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        await navigator.serviceWorker.ready;
+        logMessage('✅ Service Worker Active & Ready: ' + reg.scope);
+        return reg;
+      } catch (err) {
+        logMessage('⚠️ SW Register Notice: ' + err.message);
+        return null;
+      }
     }
 
     async function generateFCMToken() {
@@ -234,12 +240,15 @@
         }
 
         logMessage('✅ Notification permission GRANTED!');
+
+        // Ensure active Service Worker is ready before calling getToken()
+        const swReg = await ensureServiceWorkerRegistered();
+
         logMessage('🔑 Fetching REAL FCM Device Token via firebase.messaging()...');
 
-        const vapidKey = document.getElementById('vapidKeyInput').value.trim();
-        const tokenOptions = {};
-        if (vapidKey) tokenOptions.vapidKey = vapidKey;
-        if (swRegistration) tokenOptions.serviceWorkerRegistration = swRegistration;
+        const vapidKey = document.getElementById('vapidKeyInput').value.trim() || VAPID_KEY;
+        const tokenOptions = { vapidKey };
+        if (swReg) tokenOptions.serviceWorkerRegistration = swReg;
 
         const token = await messaging.getToken(tokenOptions);
 
@@ -256,7 +265,7 @@
 
           // Auto-send token to backend
           sendTokenToBackend(token);
-          alert('🎉 REAL FCM Token Generated Successfully!\n\nLength: ' + token.length + ' chars\nToken saved to backend.');
+          return token;
 
         } else {
           logMessage('❌ No token available');
@@ -271,12 +280,13 @@
     }
 
     async function sendTokenToBackend(token) {
-      const endpoints = ['/api/save-token', '/register-token'];
+      const endpoints = ['/register-device-token', '/api/save-token'];
       const payload = {
-        userId: "web_user_101",
-        deviceId: "browser_chrome_client",
+        user_id: 158,
+        device_id: "browser_chrome_client",
+        token: token,
         fcmToken: token,
-        token: token
+        device_type: "web"
       };
 
       for (const endpoint of endpoints) {
@@ -292,6 +302,28 @@
         } catch (err) {
           logMessage('⚠️ Backend Notice (' + endpoint + '): ' + err.message);
         }
+      }
+    }
+
+    async function sendTestPushFromUI() {
+      const token = document.getElementById('fcmTokenDisplay').value || await generateFCMToken();
+      if (!token) {
+        alert('Please generate an FCM token first!');
+        return;
+      }
+
+      logMessage('📢 Triggering test notification ("Hi") to token...');
+      try {
+        const res = await fetch('/api/test-fcm-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, title: "Hi", body: "FCM working test message" })
+        });
+        const data = await res.json();
+        logMessage('✅ Test Push Response: ' + JSON.stringify(data));
+        alert('✅ Test Notification Triggered!\n\nResponse: ' + JSON.stringify(data));
+      } catch (err) {
+        logMessage('❌ Test Push Error: ' + err.message);
       }
     }
 
@@ -316,7 +348,15 @@
     messaging.onMessage((payload) => {
       console.log('📩 Foreground FCM Message Received:', payload);
       logMessage('📩 FOREGROUND PUSH RECEIVED: ' + JSON.stringify(payload.notification || payload.data));
-      alert('🚨 FCM PUSH RECEIVED!\n\nTitle: ' + (payload.notification?.title || 'Alert') + '\nBody: ' + (payload.notification?.body || 'Emergency alert'));
+      alert('🚨 FCM PUSH RECEIVED!\n\nTitle: ' + (payload.notification?.title || 'Hi') + '\nBody: ' + (payload.notification?.body || 'FCM working test message'));
+    });
+
+    // Auto-trigger on app load
+    window.addEventListener('DOMContentLoaded', () => {
+      ensureServiceWorkerRegistered();
+      if (Notification.permission === 'granted') {
+        generateFCMToken();
+      }
     });
   </script>
 </body>

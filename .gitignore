@@ -41,4 +41,6 @@ src/main/resources/static/js/helicopter3d/
 # Local databases & credentials
 *.db
 firebase_service_account.json
+real_fcm_*.txt
+
 

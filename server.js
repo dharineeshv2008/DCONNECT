@@ -465,6 +465,43 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // FCM Admin Test Push Endpoint (Task 7 & Step 6)
+    if (method === 'POST' && (pathname === '/api/test-fcm-push' || pathname === '/api/notifications/test-push')) {
+      const body = await parseBody(req);
+      const token = (body.token || body.fcmToken || '').toString().trim();
+      const title = body.title || 'Hi';
+      const bodyText = body.body || 'FCM working test message';
+
+      if (!token || token.length < 100 || token.startsWith('fcm_')) {
+        return sendJson(res, 400, {
+          success: false,
+          error: 'INVALID_TOKEN',
+          message: 'Token validation failed. Token must be a valid FCM SDK token (minimum 100 characters).'
+        });
+      }
+
+      console.log(`📢 Triggering test FCM push notification to token ${token.substring(0, 15)}...`);
+
+      const { exec } = require('child_process');
+      const pyCmd = `python -c "from firebase_config import send_notification; res = send_notification(token='${token}', title='${title}', body='${bodyText}'); print('MESSAGE_ID:' + str(res))"`;
+
+      exec(pyCmd, { cwd: __dirname }, (err, stdout, stderr) => {
+        if (err) {
+          console.error('Test push error:', stderr || err.message);
+          return sendJson(res, 500, { success: false, error: 'FCM Send Failed', details: stderr || err.message });
+        }
+        const messageIdMatch = stdout.match(/MESSAGE_ID:(.+)/);
+        const messageId = messageIdMatch ? messageIdMatch[1].trim() : 'SENT';
+        return sendJson(res, 200, {
+          success: true,
+          message: 'Test notification triggered successfully.',
+          token: token,
+          messageId: messageId
+        });
+      });
+      return;
+    }
+
     // Notification History Endpoint (Pillar 4)
     if (method === 'GET' && (pathname === '/api/notifications' || pathname === '/api/notifications/history')) {
       const userId = parsedUrl.query.userId || parsedUrl.query.user_id;
