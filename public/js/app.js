@@ -2528,12 +2528,18 @@ function hideAllTabs() {
 
 function openModal(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  if (el) {
+    el.style.display = 'flex';
+    el.classList.add('active');
+  }
 }
 
 function closeModal(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.remove('active');
+  if (el) {
+    el.style.display = 'none';
+    el.classList.remove('active');
+  }
 }
 
 function openRegisterModal() { openModal('registerModal'); }
