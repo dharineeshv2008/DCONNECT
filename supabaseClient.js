@@ -155,17 +155,27 @@ const supabaseDb = {
     return data && data.length > 0 ? data[0] : null;
   },
 
-  async saveUserDeviceToken(userId, token) {
-    if (!token) return null;
+  async saveUserDeviceToken(userId, token, deviceType = 'android') {
+    if (!token || typeof token !== 'string') return null;
+
+    // STEP 1 & 4: Strict FCM Token Validation
+    const cleanToken = token.trim();
+    if (cleanToken.length < 100 || cleanToken.startsWith('fcm_') || cleanToken.startsWith('mock_') || cleanToken.startsWith('test_')) {
+      console.warn(`[SECURITY 400] Rejected invalid/dummy FCM token: '${cleanToken}' (length: ${cleanToken.length})`);
+      throw new Error('INVALID_FCM_TOKEN: FCM tokens must be real Firebase SDK tokens (minimum 100 characters).');
+    }
+
     if (userId) {
-      await supabase.from('users').update({ fcm_token: token }).eq('id', userId);
+      await supabase.from('users').update({ fcm_token: cleanToken }).eq('id', userId);
       try {
-        await supabase.from('user_device_tokens').upsert([{ user_id: userId, token }], { onConflict: 'token' });
+        await supabase.from('user_device_tokens').upsert([
+          { user_id: userId, token: cleanToken, device_type: deviceType, updated_at: new Date().toISOString() }
+        ], { onConflict: 'token' });
       } catch (e) {
         console.warn('Device token insert notice:', e.message);
       }
     }
-    return { success: true, token };
+    return { success: true, token: cleanToken, deviceType };
   },
 
   async getUsersInRadius(disasterLat, disasterLng, radiusKm = 30.0) {

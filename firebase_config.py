@@ -190,8 +190,35 @@ def send_notification(token: str, title: str, body: str, data: Optional[Dict[str
         return None
 
 # ==============================================================================
-# STEP 4 & 6: TEST FUNCTION & DEBUGGING
+# STEP 6: FCM SEND TEST FUNCTION
 # ==============================================================================
+
+def send_test(token: str) -> str:
+    """
+    Sends high-priority test notification using Firebase Admin SDK.
+    Validates token format and raises ValueError if dummy token is supplied.
+    """
+    if not token or not isinstance(token, str) or len(token.trim() if hasattr(token, 'trim') else token.strip()) < 100 or token.startswith("fcm_") or token.startswith("mock_"):
+        raise ValueError(f"Invalid FCM token format: '{token}'. FCM tokens must be real Firebase SDK tokens (minimum 100 characters).")
+
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title="🚨 Test",
+            body="FCM working?"
+        ),
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                channel_id="disaster_alerts_channel",
+                sound="default",
+                click_action="OPEN_DISASTER_ALERT"
+            )
+        ),
+        token=token.strip()
+    )
+    response = messaging.send(message)
+    print(f"✅ FCM Test Notification Sent Successfully! Message ID: {response}")
+    return response
 
 def send_test_to_all(tokens: List[str]):
     """Iterates through a list of tokens, logs details, and sends test notification."""
