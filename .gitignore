@@ -44,4 +44,10 @@ firebase_service_account.json
 src/main/resources/firebase-service-account.json
 real_fcm_*.txt
 
+# Android build outputs & local properties
+.gradle/
+**/build/
+local.properties
+
+
 

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#1E293B"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_marginBottom="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:layout_marginBottom="6dp">
+
+        <TextView
+            android:id="@+id/itemResCategory"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#0284C7"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:text="FOOD"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/itemResStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="#059669"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:text="AVAILABLE"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/itemResQty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="500 Packets"
+            android:textColor="#38BDF8"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/itemResDesc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="500 Ready-to-eat Packets, clean &amp; sealed"
+        android:textColor="#F8FAFC"
+        android:textSize="14sp"
+        android:layout_marginBottom="6dp" />
+
+    <TextView
+        android:id="@+id/itemResAddress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📍 Relief Warehouse Gate 3, Central Stadium"
+        android:textColor="#CBD5E1"
+        android:textSize="12sp"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/itemResContact"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📞 Pickup Contact: 9876543210"
+        android:textColor="#94A3B8"
+        android:textSize="11sp" />
+
+</LinearLayout>

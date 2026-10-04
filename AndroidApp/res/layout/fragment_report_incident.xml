@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1E293B"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📢 Submit Disaster Incident Report"
+            android:textColor="#F8FAFC"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#0284C7"
+            android:padding="10dp"
+            android:text="💡 Haversine Merge Engine Active: Reports within 10 km &amp; 3 hours are automatically merged into the active incident pipeline."
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Disaster Type -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Disaster Type *"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/spinnerReportType"
+            android:layout_width="match_parent"
+            android:layout_height="45dp"
+            android:background="#334155"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Incident Title *"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/editReportTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. Flash Flooding at North Bridge"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B"
+            android:background="#334155"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Location Landmark -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Incident Location Landmark / Address *"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/editReportLocation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. Near Gandhi Circle, Sector 4"
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B"
+            android:background="#334155"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp" />
+
+        <!-- GPS Coordinates -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginEnd="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Latitude *"
+                    android:textColor="#CBD5E1"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/editReportLat"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="13.0827"
+                    android:textColor="#F8FAFC"
+                    android:textColorHint="#64748B"
+                    android:inputType="numberDecimal|numberSigned"
+                    android:background="#334155"
+                    android:padding="10dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Longitude *"
+                    android:textColor="#CBD5E1"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/editReportLng"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="80.2707"
+                    android:textColor="#F8FAFC"
+                    android:textColorHint="#64748B"
+                    android:inputType="numberDecimal|numberSigned"
+                    android:background="#334155"
+                    android:padding="10dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Description -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Situation Description *"
+            android:textColor="#CBD5E1"
+            android:textSize="13sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/editReportDescription"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:hint="Describe water level, trapped persons, blocked roads, medical urgency..."
+            android:textColor="#F8FAFC"
+            android:textColorHint="#64748B"
+            android:gravity="top|start"
+            android:background="#334155"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Submit Button -->
+        <Button
+            android:id="@+id/btnSubmitReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="#EF4444"
+            android:padding="12dp"
+            android:text="🚨 DISPATCH INCIDENT REPORT"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+</ScrollView>

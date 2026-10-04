@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#1E293B"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_marginBottom="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:layout_marginBottom="6dp">
+
+        <TextView
+            android:id="@+id/itemVolName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="John Doe"
+            android:textColor="#F8FAFC"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/itemVolStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#059669"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:text="AVAILABLE"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/itemVolSkills"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Skills: First Aid, Boat Rescue, Swimming"
+        android:textColor="#38BDF8"
+        android:textSize="13sp"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/itemVolOrg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Organization: Red Cross Volunteer Wing"
+        android:textColor="#CBD5E1"
+        android:textSize="12sp"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:id="@+id/itemVolPhone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📞 9876543210"
+        android:textColor="#94A3B8"
+        android:textSize="12sp" />
+
+</LinearLayout>
