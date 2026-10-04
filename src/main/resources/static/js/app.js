@@ -274,6 +274,30 @@ function registerServiceWorker() {
 
 async function initFCM(userId = null) {
   try {
+    // 1. Android Native App JavascriptInterface Bridge
+    if (window.AndroidFCM && typeof window.AndroidFCM.getNativeFcmToken === 'function') {
+      const nativeToken = window.AndroidFCM.getNativeFcmToken();
+      if (nativeToken && nativeToken.length >= 100) {
+        console.log('[FCM] Captured Android Native device FCM token:', nativeToken);
+        localStorage.setItem('fcm_token', nativeToken);
+        const targetUserId = userId || (currentUser ? currentUser.id : null);
+        await fetch('/api/save-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: targetUserId,
+            userId: targetUserId,
+            token: nativeToken,
+            fcm_token: nativeToken,
+            fcmToken: nativeToken,
+            device_type: 'android',
+            deviceType: 'android'
+          })
+        }).catch(() => null);
+        return nativeToken;
+      }
+    }
+
     if (typeof firebase === 'undefined') {
       console.warn('[FCM] Firebase Web SDK not loaded yet.');
       return null;
