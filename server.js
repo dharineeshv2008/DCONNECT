@@ -413,7 +413,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // FCM Device Token Registration Endpoint (Save Token & Location) - PART 3
-    if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token' || pathname === '/register-device-token' || pathname === '/register-token')) {
+    if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/save-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token' || pathname === '/register-device-token' || pathname === '/register-token')) {
       const body = await parseBody(req);
       const caller = await getAuthUser(req);
       const token = (body.fcmToken || body.fcm_token || body.token || '').toString().trim();

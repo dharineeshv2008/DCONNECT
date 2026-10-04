@@ -475,7 +475,7 @@ async function sendFcmTokenToServer() {
   if (statusLog) statusLog.textContent = '📡 Sending FCM Token to backend API...';
 
   try {
-    const response = await fetch('/save-token', {
+    const response = await fetch('/api/save-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
