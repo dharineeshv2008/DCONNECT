@@ -31,10 +31,22 @@ logger = logging.getLogger("FCM_Service")
 SERVICE_ACCOUNT_PATH = os.path.join(os.path.dirname(__file__), "firebase_service_account.json")
 
 def load_credentials_dict() -> Dict:
-    """Loads service account credentials from ENV variable or local json file."""
+    """Loads service account credentials from ENV variables or local json file."""
     env_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    project_id = os.environ.get("FIREBASE_PROJECT_ID")
+    private_key = os.environ.get("FIREBASE_PRIVATE_KEY")
+    client_email = os.environ.get("FIREBASE_CLIENT_EMAIL")
+
     cred_dict = None
-    if env_json:
+    if project_id and private_key and client_email:
+        logger.info("Loading Firebase credentials from ENV variables (FIREBASE_PROJECT_ID, etc.)...")
+        cred_dict = {
+            "type": "service_account",
+            "project_id": project_id,
+            "private_key": private_key.replace("\\n", "\n"),
+            "client_email": client_email
+        }
+    elif env_json:
         logger.info("Loading Firebase credentials from ENV FIREBASE_SERVICE_ACCOUNT_JSON...")
         cred_dict = json.loads(env_json)
     elif os.path.exists(SERVICE_ACCOUNT_PATH):
@@ -43,7 +55,7 @@ def load_credentials_dict() -> Dict:
             cred_dict = json.load(f)
     else:
         raise FileNotFoundError(
-            f"Firebase credentials not found. Please provide ENV FIREBASE_SERVICE_ACCOUNT_JSON "
+            f"Firebase credentials not found. Please provide ENV FIREBASE_PROJECT_ID/PRIVATE_KEY/CLIENT_EMAIL "
             f"or place service account json at '{SERVICE_ACCOUNT_PATH}'"
         )
 

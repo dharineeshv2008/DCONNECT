@@ -107,6 +107,81 @@ def predict_severity(req: PredictionRequest):
 
     return PredictionResponse(severity="MEDIUM", confidence=0.75)
 
+from typing import Union, Dict, Optional
+
+class SaveTokenRequest(BaseModel):
+    user_id: Optional[Union[str, int]] = None
+    fcm_token: str
+    device_type: Optional[str] = "web_or_android"
+
+class SendTestRequest(BaseModel):
+    fcm_token: Optional[str] = None
+    token: Optional[str] = None
+    title: Optional[str] = "Hi"
+    body: Optional[str] = "Hi FCM Working ✅"
+
+class SendNotificationRequest(BaseModel):
+    fcm_token: Optional[str] = None
+    user_id: Optional[Union[str, int]] = None
+    title: str
+    body: str
+    data: Optional[Dict[str, str]] = None
+
+@app.post("/save-token")
+@app.post("/api/save-token")
+def save_token(req: SaveTokenRequest):
+    token = (req.fcm_token or "").strip()
+    if not token or len(token) < 100 or token.startswith("fcm_") or token.startswith("mock_"):
+        raise HTTPException(status_code=400, detail="INVALID_TOKEN: Minimum 100 characters real FCM token required.")
+    
+    import firebase_config
+    if req.user_id:
+        firebase_config.save_fcm_token(user_id=str(req.user_id), device_id=req.device_type or "web_or_android", fcm_token=token)
+    
+    # Auto-send test notification immediately
+    res = firebase_config.send_notification(token=token, title="Hi", body="Hi FCM Working ✅")
+    return {
+        "success": True,
+        "message": "FCM Device token registered successfully.",
+        "user_id": req.user_id,
+        "fcm_token": token,
+        "device_type": req.device_type,
+        "test_sent": res is not None
+    }
+
+@app.post("/send-test")
+@app.post("/api/send-test")
+def send_test_endpoint(req: SendTestRequest):
+    token = (req.fcm_token or req.token or "").strip()
+    if not token or len(token) < 100:
+        raise HTTPException(status_code=400, detail="INVALID_TOKEN: Real FCM token required.")
+    import firebase_config
+    res = firebase_config.send_notification(token=token, title=req.title or "Hi", body=req.body or "Hi FCM Working ✅")
+    return {"success": True, "message": "Test notification triggered", "message_id": str(res)}
+
+@app.post("/send-notification")
+@app.post("/api/send-notification")
+def send_notification_endpoint(req: SendNotificationRequest):
+    import firebase_config
+    tokens = []
+    if req.fcm_token:
+        tokens.append(req.fcm_token)
+    elif req.user_id:
+        tokens = firebase_config.get_tokens_for_user(str(req.user_id))
+    else:
+        tokens = firebase_config.get_all_stored_tokens()
+        
+    if not tokens:
+        raise HTTPException(status_code=404, detail="No target FCM tokens found.")
+        
+    results = []
+    for t in tokens:
+        res = firebase_config.send_notification(token=t, title=req.title, body=req.body, data=req.data)
+        results.append({"token": t[:15] + "...", "status": "sent" if res else "failed", "message_id": str(res)})
+        
+    return {"success": True, "count": len(results), "results": results}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api_service:app", host="127.0.0.1", port=8000, reload=True)
+

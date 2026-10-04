@@ -485,8 +485,8 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // FCM Admin Test Push Endpoint (Task 7 & Step 6)
-    if (method === 'POST' && (pathname === '/api/test-fcm-push' || pathname === '/api/notifications/test-push')) {
+    // FCM Admin Test Push Endpoint
+    if (method === 'POST' && (pathname === '/send-test' || pathname === '/api/send-test' || pathname === '/api/test-fcm-push' || pathname === '/api/notifications/test-push')) {
       const body = await parseBody(req);
       const token = (body.token || body.fcmToken || '').toString().trim();
       const title = body.title || 'Hi';
