@@ -38,3 +38,7 @@ public/js/helicopter3d/
 src/main/resources/static/assets/helicopter.glb
 src/main/resources/static/js/helicopter3d/
 
+# Local databases & credentials
+*.db
+firebase_service_account.json
+
