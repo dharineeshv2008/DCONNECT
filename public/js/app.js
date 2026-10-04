@@ -374,6 +374,136 @@ async function registerDeviceToken(userId = null) {
   return await initFCM(userId || (currentUser ? currentUser.id : null));
 }
 
+// ==============================================================================
+// 📱 DEVELOPER DEBUG FEATURE: GET MY DEVICE TOKEN
+// ==============================================================================
+
+async function openGetMyDeviceTokenModal() {
+  openModal('getDeviceTokenModal');
+  const existingToken = localStorage.getItem('fcm_token');
+  const txtBox = document.getElementById('fcmTokenDisplayBox');
+  const errBox = document.getElementById('fcmTokenErrorBox');
+  const statusLog = document.getElementById('fcmStatusLog');
+
+  if (errBox) errBox.innerHTML = '';
+  if (statusLog) statusLog.textContent = 'Ready. Click "Fetch Device FCM Token" or auto-fetching...';
+
+  if (existingToken && existingToken.length >= 100) {
+    if (txtBox) txtBox.value = existingToken;
+    console.log("Existing Token generated:", existingToken);
+  } else {
+    await fetchMyDeviceFcmToken();
+  }
+}
+
+async function fetchMyDeviceFcmToken() {
+  const txtBox = document.getElementById('fcmTokenDisplayBox');
+  const errBox = document.getElementById('fcmTokenErrorBox');
+  const statusLog = document.getElementById('fcmStatusLog');
+
+  if (errBox) errBox.innerHTML = '';
+  if (statusLog) statusLog.textContent = '⏳ Requesting notification permission & fetching FCM Token...';
+  if (txtBox) txtBox.value = 'Fetching token from Firebase Messaging...';
+
+  try {
+    const token = await initFCM(currentUser ? currentUser.id : null);
+    if (!token || token.length < 50) {
+      const stored = localStorage.getItem('fcm_token');
+      if (stored && stored.length >= 100) {
+        if (txtBox) txtBox.value = stored;
+        if (statusLog) statusLog.textContent = '✅ Token fetched from local storage!';
+        console.log("Token generated:", stored);
+        return stored;
+      }
+      throw new Error('FCM Token generation returned null or invalid length.');
+    }
+
+    if (txtBox) txtBox.value = token;
+    if (statusLog) statusLog.textContent = '✅ Real FCM Token generated successfully!';
+    console.log("Token generated:", token);
+    return token;
+  } catch (err) {
+    console.error('Fetch FCM Token Error:', err);
+    if (txtBox) txtBox.value = '';
+    if (statusLog) statusLog.textContent = '❌ Token generation failed.';
+    if (errBox) {
+      errBox.innerHTML = `<div class="alert alert-danger" style="padding: 8px 12px; font-size: 0.85rem;">⚠️ Failed to generate FCM Token: ${err.message || 'Notification permission denied or network error.'}</div>`;
+    }
+    return null;
+  }
+}
+
+async function copyFcmTokenToClipboard() {
+  const txtBox = document.getElementById('fcmTokenDisplayBox');
+  const token = (txtBox ? txtBox.value : '').trim();
+
+  if (!token || token.startsWith('Click') || token.startsWith('Fetching')) {
+    showToast('Copy Failed', 'No valid FCM Token to copy. Please click Fetch Token first.', 'warning');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(token);
+    showToast('Token Copied', 'FCM Device Token copied to clipboard! 📋', 'success');
+    console.log("FCM Token copied to clipboard successfully.");
+  } catch (e) {
+    if (txtBox) {
+      txtBox.select();
+      document.execCommand('copy');
+    }
+    showToast('Token Copied', 'FCM Device Token copied to clipboard! 📋', 'success');
+  }
+}
+
+async function sendFcmTokenToServer() {
+  const txtBox = document.getElementById('fcmTokenDisplayBox');
+  const token = (txtBox ? txtBox.value : '').trim();
+  const statusLog = document.getElementById('fcmStatusLog');
+  const errBox = document.getElementById('fcmTokenErrorBox');
+
+  if (errBox) errBox.innerHTML = '';
+  if (!token || token.length < 50 || token.startsWith('Click')) {
+    if (errBox) errBox.innerHTML = `<div class="alert alert-warning" style="padding: 8px 12px; font-size: 0.85rem;">⚠️ Please fetch a valid FCM Token before sending to server.</div>`;
+    return;
+  }
+
+  const userId = currentUser ? currentUser.id : null;
+  const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'android' : 'web';
+
+  console.log("Token generated:", token);
+  console.log(`Sending token to backend /save-token (userId: ${userId}, device_type: ${deviceType})...`);
+  if (statusLog) statusLog.textContent = '📡 Sending FCM Token to backend API...';
+
+  try {
+    const response = await fetch('/save-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        token: token,
+        fcm_token: token,
+        device_type: deviceType
+      })
+    });
+
+    const result = await response.json();
+    console.log("Backend response:", result);
+
+    if (response.ok && result.success) {
+      if (statusLog) statusLog.textContent = '✅ Token saved in Supabase DB! Auto test push triggered!';
+      showToast('Token Saved', 'FCM Token registered in Supabase! Test push notification sent ✅', 'success');
+    } else {
+      throw new Error(result.message || result.detail || 'Backend API error');
+    }
+  } catch (err) {
+    console.error("Backend response error:", err.message);
+    if (statusLog) statusLog.textContent = '❌ Failed to save token on backend server.';
+    if (errBox) {
+      errBox.innerHTML = `<div class="alert alert-danger" style="padding: 8px 12px; font-size: 0.85rem;">❌ Failed to send token to server: ${err.message}</div>`;
+    }
+  }
+}
+
 function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
   console.error('API Error:', err);
   if (!navigator.onLine) {
