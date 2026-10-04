@@ -403,6 +403,11 @@ async function registerDeviceToken(userId = null) {
 // ==============================================================================
 
 async function openGetMyDeviceTokenModal() {
+  if (window.AndroidFCM && typeof window.AndroidFCM.showDeviceTokenDialog === 'function') {
+    window.AndroidFCM.showDeviceTokenDialog();
+    return;
+  }
+
   openModal('getDeviceTokenModal');
   const existingToken = localStorage.getItem('fcm_token');
   const txtBox = document.getElementById('fcmTokenDisplayBox');
