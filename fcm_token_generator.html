@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real FCM Device Token Generator | D-Connect</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg-color);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+    .container {
+      width: 100%;
+      max-width: 720px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.5rem;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    input[type="text"] {
+      width: 100%;
+      background: #090d16;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+      outline: none;
+    }
+    .btn {
+      background: var(--primary);
+      color: #000;
+      font-weight: 700;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.1s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn:hover {
+      background: var(--primary-hover);
+      color: #fff;
+    }
+    .btn:active {
+      transform: scale(0.98);
+    }
+    .token-box {
+      margin-top: 24px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      position: relative;
+    }
+    .token-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .status-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(148, 163, 184, 0.2);
+      color: var(--text-muted);
+    }
+    .status-badge.success {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--success);
+    }
+    .status-badge.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      background: transparent;
+      color: #38bdf8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      border: none;
+      resize: none;
+      outline: none;
+      word-break: break-all;
+      box-sizing: border-box;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .log-panel {
+      margin-top: 20px;
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #a7f3d0;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+  </style>
+
+  <!-- Firebase Web SDK (Compat mode) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <h1>📡 Real FCM Device Token Generator</h1>
+    <p>Generate, copy, and register your browser or mobile device's <strong>REAL Firebase Cloud Messaging (FCM)</strong> token.</p>
+
+    <div class="form-group">
+      <label>Web Push Certificate VAPID Key (Optional / Required for Web Push):</label>
+      <input type="text" id="vapidKeyInput" placeholder="Firebase Console → Project Settings → Cloud Messaging → Web Push certificates VAPID Key">
+    </div>
+
+    <div class="actions">
+      <button class="btn" onclick="generateFCMToken()">🚀 Generate Real FCM Token</button>
+      <button class="btn" style="background: #475569; color: #fff;" onclick="copyToken()">📋 Copy Token</button>
+    </div>
+
+    <div class="token-box">
+      <div class="token-header">
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">REAL FCM REGISTRATION TOKEN (<span id="tokenLength">0</span> chars)</span>
+        <span id="statusBadge" class="status-badge">NOT GENERATED</span>
+      </div>
+      <textarea id="fcmTokenDisplay" readonly placeholder="Click 'Generate Real FCM Token' to request permission and retrieve token..."></textarea>
+    </div>
+
+    <div class="log-panel" id="logPanel">
+      <div>> Ready. Click button to initialize Firebase Messaging...</div>
+    </div>
+  </div>
+
+  <script>
+    // Firebase Project Credentials (disasterconnect-b1861)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCCYfw_0JfzFKdRWkstVhHpFoBf7omeViU",
+      authDomain: "disasterconnect-b1861.firebaseapp.com",
+      projectId: "disasterconnect-b1861",
+      storageBucket: "disasterconnect-b1861.firebasestorage.app",
+      messagingSenderId: "454830688911",
+      appId: "1:454830688911:web:7f61c3a1059f81d6862708"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    function logMessage(msg) {
+      console.log(msg);
+      const panel = document.getElementById('logPanel');
+      panel.innerHTML += `<div>> ${msg}</div>`;
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    // Register Service Worker
+    let swRegistration = null;
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then(reg => {
+          swRegistration = reg;
+          logMessage('✅ Service Worker registered: ' + reg.scope);
+        })
+        .catch(err => logMessage('⚠️ SW Register Notice: ' + err.message));
+    }
+
+    async function generateFCMToken() {
+      try {
+        logMessage('🔔 Requesting Notification permission...');
+        const permission = await Notification.requestPermission();
+        
+        if (permission !== 'granted') {
+          logMessage('❌ Notification permission DENIED by browser/user');
+          updateBadge('PERMISSION DENIED', false);
+          alert('❌ Notification permission denied. Please allow notifications in site settings and retry.');
+          return;
+        }
+
+        logMessage('✅ Notification permission GRANTED!');
+        logMessage('🔑 Fetching REAL FCM Device Token via firebase.messaging()...');
+
+        const vapidKey = document.getElementById('vapidKeyInput').value.trim();
+        const tokenOptions = {};
+        if (vapidKey) tokenOptions.vapidKey = vapidKey;
+        if (swRegistration) tokenOptions.serviceWorkerRegistration = swRegistration;
+
+        const token = await messaging.getToken(tokenOptions);
+
+        if (token) {
+          console.log('====================================================');
+          console.log('✅ REAL FCM DEVICE TOKEN GENERATED SUCCESSFULLY:');
+          console.log(token);
+          console.log('====================================================');
+
+          document.getElementById('fcmTokenDisplay').value = token;
+          document.getElementById('tokenLength').innerText = token.length;
+          updateBadge('TOKEN GENERATED', true);
+          logMessage('✅ REAL FCM TOKEN RECEIVED (~' + token.length + ' chars)');
+
+          // Auto-send token to backend
+          sendTokenToBackend(token);
+          alert('🎉 REAL FCM Token Generated Successfully!\n\nLength: ' + token.length + ' chars\nToken saved to backend.');
+
+        } else {
+          logMessage('❌ No token available');
+          updateBadge('NO TOKEN AVAIL', false);
+        }
+
+      } catch (error) {
+        console.error('🔥 FCM ERROR:', error);
+        logMessage('🔥 FCM ERROR: ' + (error.message || error));
+        updateBadge('FCM ERROR', false);
+      }
+    }
+
+    async function sendTokenToBackend(token) {
+      const endpoints = ['/api/save-token', '/register-token'];
+      const payload = {
+        userId: "web_user_101",
+        deviceId: "browser_chrome_client",
+        fcmToken: token,
+        token: token
+      };
+
+      for (const endpoint of endpoints) {
+        try {
+          logMessage('📤 Posting FCM Token to ' + endpoint + '...');
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const json = await res.json();
+          logMessage('✅ Backend Response (' + endpoint + '): ' + JSON.stringify(json));
+        } catch (err) {
+          logMessage('⚠️ Backend Notice (' + endpoint + '): ' + err.message);
+        }
+      }
+    }
+
+    function copyToken() {
+      const tokenInput = document.getElementById('fcmTokenDisplay');
+      if (!tokenInput.value) {
+        alert('Please generate an FCM Token first!');
+        return;
+      }
+      tokenInput.select();
+      navigator.clipboard.writeText(tokenInput.value);
+      alert('📋 FCM Token copied to clipboard!\n\nToken length: ' + tokenInput.value.length + ' chars');
+    }
+
+    function updateBadge(text, isSuccess) {
+      const badge = document.getElementById('statusBadge');
+      badge.innerText = text;
+      badge.className = 'status-badge ' + (isSuccess ? 'success' : 'error');
+    }
+
+    // Auto-listen for foreground messages
+    messaging.onMessage((payload) => {
+      console.log('📩 Foreground FCM Message Received:', payload);
+      logMessage('📩 FOREGROUND PUSH RECEIVED: ' + JSON.stringify(payload.notification || payload.data));
+      alert('🚨 FCM PUSH RECEIVED!\n\nTitle: ' + (payload.notification?.title || 'Alert') + '\nBody: ' + (payload.notification?.body || 'Emergency alert'));
+    });
+  </script>
+</body>
+</html>
