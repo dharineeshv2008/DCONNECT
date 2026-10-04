@@ -155,27 +155,46 @@ const supabaseDb = {
     return data && data.length > 0 ? data[0] : null;
   },
 
-  async saveUserDeviceToken(userId, token, deviceType = 'android') {
+  async saveUserDeviceToken(userId, token, deviceType = 'web_or_android') {
     if (!token || typeof token !== 'string') return null;
 
-    // STEP 1 & 4: Strict FCM Token Validation
+    // Strict FCM Token Validation
     const cleanToken = token.trim();
     if (cleanToken.length < 100 || cleanToken.startsWith('fcm_') || cleanToken.startsWith('mock_') || cleanToken.startsWith('test_')) {
       console.warn(`[SECURITY 400] Rejected invalid/dummy FCM token: '${cleanToken}' (length: ${cleanToken.length})`);
       throw new Error('INVALID_FCM_TOKEN: FCM tokens must be real Firebase SDK tokens (minimum 100 characters).');
     }
 
+    const payload = {
+      token: cleanToken,
+      fcm_token: cleanToken,
+      device_type: deviceType || 'web_or_android',
+      updated_at: new Date().toISOString()
+    };
     if (userId) {
-      await supabase.from('users').update({ fcm_token: cleanToken }).eq('id', userId);
+      payload.user_id = parseInt(userId);
+    }
+
+    try {
+      const { data, error } = await supabase.from('user_device_tokens').upsert([payload], { onConflict: 'token' }).select();
+      if (error) {
+        console.warn('Device token insert notice:', error.message);
+      } else {
+        console.log('✅ FCM token stored/updated in user_device_tokens table:', data);
+      }
+    } catch (e) {
+      console.warn('Device token insert notice:', e.message);
+    }
+
+    if (userId) {
       try {
-        await supabase.from('user_device_tokens').upsert([
-          { user_id: userId, token: cleanToken, device_type: deviceType, updated_at: new Date().toISOString() }
-        ], { onConflict: 'token' });
+        await supabase.from('users').update({ fcm_token: cleanToken }).eq('id', parseInt(userId));
       } catch (e) {
-        console.warn('Device token insert notice:', e.message);
+        console.warn('User fcm_token update notice:', e.message);
       }
     }
-    return { success: true, token: cleanToken, deviceType };
+
+    return { success: true, token: cleanToken, fcm_token: cleanToken, deviceType, user_id: userId };
   },
 
   async getUsersInRadius(disasterLat, disasterLng, radiusKm = 30.0) {

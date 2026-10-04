@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSupabaseRealtime();
   registerServiceWorker();
   restoreSession();
+  initFCM(); // Generate & store real FCM token immediately on app load
 
   // Initialize iOS Liquid Glass Role Slider
   setTimeout(updateLiquidSlider, 60);
@@ -244,39 +245,133 @@ function initNetworkListeners() {
   }
 }
 
+// Firebase Web SDK Configuration & Constants
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCCYfw_0JfzFKdRWkstVhHpFoBf7omeViU",
+  authDomain: "disasterconnect-b1861.firebaseapp.com",
+  projectId: "disasterconnect-b1861",
+  storageBucket: "disasterconnect-b1861.firebasestorage.app",
+  messagingSenderId: "454830688911",
+  appId: "1:454830688911:web:7f61c3a1059f81d6862708"
+};
+const FCM_VAPID_KEY = "BNrRMrYqxOMtKNRDlOgVt4XHgkIf2NE5XITsHuw5yKa1y63CGeFfbpVv8UHtdAEX89zjBQpgjAuZyvzkMpN1n20";
+let fcmMessagingInstance = null;
+
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
+      navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
         .then(reg => {
           console.log('📱 [Service Worker]: Active & registered on scope:', reg.scope);
         })
         .catch(err => {
-          console.warn('⚠️ [Service Worker]: Registration failed:', err);
+          console.warn('⚠️ [Service Worker]: Fallback to /sw.js registration:', err);
+          navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW reg notice:', e.message));
         });
     });
   }
 }
 
-async function registerDeviceToken() {
-  if (!currentUser || !currentUser.id) return;
+async function initFCM(userId = null) {
   try {
-    let token = localStorage.getItem('fcm_token');
-    if (!token) {
-      token = 'fcm_' + currentUser.id + '_' + Math.random().toString(36).substring(2, 10);
-      localStorage.setItem('fcm_token', token);
+    if (typeof firebase === 'undefined') {
+      console.warn('[FCM] Firebase Web SDK not loaded yet.');
+      return null;
     }
-    await fetchAPI('/users/device-token', {
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
+    if (!fcmMessagingInstance) {
+      fcmMessagingInstance = firebase.messaging();
+    }
+
+    let swReg = null;
+    if ('serviceWorker' in navigator) {
+      swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' }).catch(() => null);
+      if (!swReg) {
+        swReg = await navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => null);
+      }
+      await navigator.serviceWorker.ready.catch(() => null);
+    }
+
+    let permission = "default";
+    if ('Notification' in window) {
+      permission = await Notification.requestPermission();
+    }
+
+    if (permission !== "granted") {
+      console.warn('[FCM] Notification permission not granted:', permission);
+      return null;
+    }
+
+    // Fetch REAL FCM token using exponential backoff retry
+    let token = null;
+    const maxRetries = 5;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const tokenOptions = { vapidKey: FCM_VAPID_KEY };
+        if (swReg) tokenOptions.serviceWorkerRegistration = swReg;
+        
+        token = await fcmMessagingInstance.getToken(tokenOptions);
+        if (token && token.length >= 100 && !token.startsWith('fcm_')) {
+          break;
+        }
+      } catch (err) {
+        console.warn(`[FCM] Token generation attempt ${attempt}/${maxRetries} failed:`, err.message);
+      }
+      const delay = Math.pow(2, attempt) * 500;
+      await new Promise(res => setTimeout(res, delay));
+    }
+
+    if (!token) {
+      console.error('[FCM] REAL FCM token could not be generated.');
+      throw new Error("FCM token not generated");
+    }
+
+    console.log("REAL FCM TOKEN:", token);
+    localStorage.setItem('fcm_token', token);
+
+    const targetUserId = userId || (currentUser ? currentUser.id : null);
+    const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'android' : 'web';
+
+    const response = await fetch('/api/save-token', {
       method: 'POST',
-      body: {
-        userId: currentUser.id,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: targetUserId,
+        userId: targetUserId,
+        token: token,
+        fcm_token: token,
         fcmToken: token,
-        deviceType: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'web'
+        device_type: deviceType,
+        deviceType: deviceType,
+        latitude: currentCoords ? currentCoords.latitude : null,
+        longitude: currentCoords ? currentCoords.longitude : null
+      })
+    });
+
+    const result = await response.json();
+    console.log('[FCM] Token stored in Supabase:', result);
+
+    fcmMessagingInstance.onMessage((payload) => {
+      console.log('[FCM Foreground] Received message:', payload);
+      const title = payload.notification?.title || payload.data?.title || '🚨 D-Connect Alert';
+      const body = payload.notification?.body || payload.data?.body || 'Emergency notification received.';
+      if (typeof showToast === 'function') {
+        showToast(`${title}: ${body}`, 'info');
       }
     });
+
+    return token;
   } catch (err) {
-    console.warn('⚠️ [Device Token]: Notice:', err.message);
+    console.error('[FCM Initialization Error]:', err.message);
+    return null;
   }
+}
+
+async function registerDeviceToken(userId = null) {
+  return await initFCM(userId || (currentUser ? currentUser.id : null));
 }
 
 function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
@@ -705,6 +800,7 @@ async function handleRegister(e) {
     
     showDashboardApp();
     updateUserUI();
+    initFCM(currentUser ? currentUser.id : null);
 
     if (!currentUser.approved) {
       showPendingApprovalView();

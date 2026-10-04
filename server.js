@@ -412,19 +412,19 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // FCM Device Token Registration Endpoint (Save Token & Location) - STEP 3 & 4
+    // FCM Device Token Registration Endpoint (Save Token & Location) - PART 3
     if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token' || pathname === '/register-device-token' || pathname === '/register-token')) {
       const body = await parseBody(req);
       const caller = await getAuthUser(req);
       const token = (body.fcmToken || body.fcm_token || body.token || '').toString().trim();
       const userId = caller ? caller.id : (body.userId || body.user_id || null);
-      const deviceType = (body.device_type || body.deviceType || 'android').toString().toLowerCase();
+      const deviceType = (body.device_type || body.deviceType || 'web_or_android').toString().toLowerCase();
 
       if (!token) {
         return sendJson(res, 400, { success: false, error: 'Bad Request', message: 'FCM device token is required.' });
       }
 
-      // STEP 1 & 4: Strict Token Validation (Reject dummy/mock tokens like 'fcm_158_dbk94hgm')
+      // Strict Token Validation (Reject dummy/mock tokens)
       if (token.length < 100 || token.startsWith('fcm_') || token.startsWith('mock_') || token.startsWith('test_')) {
         console.warn(`[SECURITY 400] Rejected invalid FCM token '${token}' for User ID ${userId}`);
         return sendJson(res, 400, {
@@ -434,13 +434,14 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      if (userId) {
-        try {
-          await supabaseDb.saveUserDeviceToken(userId, token, deviceType);
-        } catch (err) {
-          return sendJson(res, 400, { success: false, error: 'Token Registration Failed', message: err.message });
-        }
+      // Save token into user_device_tokens and users table
+      try {
+        await supabaseDb.saveUserDeviceToken(userId, token, deviceType);
+      } catch (err) {
+        return sendJson(res, 400, { success: false, error: 'Token Registration Failed', message: err.message });
+      }
 
+      if (userId) {
         const updates = { fcm_token: token };
         if (body.latitude !== undefined && body.latitude !== null && body.latitude !== '') {
           const latVal = parseFloat(body.latitude);
@@ -456,12 +457,31 @@ const server = http.createServer(async (req, res) => {
           console.warn('User location update notice:', e.message);
         }
       }
+
+      // Auto-send test notification "Hi - FCM Working ✅" after saving token (Part 3)
+      const autoTestTitle = "Hi";
+      const autoTestBody = "Hi - FCM Working ✅";
+      console.log(`📢 Auto-triggering test FCM push notification to token ${token.substring(0, 15)}...`);
+
+      const { exec } = require('child_process');
+      const pyCmd = `python -c "from firebase_config import send_notification; res = send_notification(token='${token}', title='${autoTestTitle}', body='${autoTestBody}'); print('MESSAGE_ID:' + str(res))"`;
+
+      exec(pyCmd, { cwd: __dirname }, (err, stdout, stderr) => {
+        if (err) {
+          console.warn('[FCM Auto-Push Notice]:', stderr || err.message);
+        } else {
+          console.log('[FCM Auto-Push Result]:', stdout.trim());
+        }
+      });
+
       return sendJson(res, 200, {
         success: true,
         message: 'FCM Device token registered successfully.',
         user_id: userId,
-        token,
-        device_type: deviceType
+        token: token,
+        fcm_token: token,
+        device_type: deviceType,
+        auto_test_sent: true
       });
     }
 
@@ -1726,8 +1746,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => {
-    console.log(`Disaster Coordination Server running at http://localhost:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Disaster Coordination Server running at:`);
+    console.log(`  Local:   http://localhost:${PORT}`);
+    console.log(`  Network: http://10.73.251.31:${PORT}`);
+    console.log(`  FCM Mobile Token Generator: http://10.73.251.31:${PORT}/fcm_token_generator.html`);
     console.log(`Supabase Connected: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co'}`);
     initTelegramBot().catch(err => console.warn('Telegram Bot startup warning:', err.message));
   });

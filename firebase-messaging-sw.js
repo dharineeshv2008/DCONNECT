@@ -1,4 +1,4 @@
-// Firebase Cloud Messaging Service Worker for D-Connect
+// Firebase Cloud Messaging Service Worker for D-Connect (Background Notifications)
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || payload.data?.title || '🚨 D-Connect Emergency Alert';
   const options = {
     body: payload.notification?.body || payload.data?.body || 'Emergency notification received.',
-    icon: '/assets/icon-192.png',
-    badge: '/assets/icon-192.png',
+    icon: '/assets/logo.png',
+    badge: '/assets/logo.png',
     vibrate: [200, 100, 200],
     data: payload.data || {}
   };
