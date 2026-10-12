@@ -1746,14 +1746,30 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Disaster Coordination Server running at:`);
-    console.log(`  Local:   http://localhost:${PORT}`);
-    console.log(`  Network: http://10.73.251.31:${PORT}`);
-    console.log(`  FCM Mobile Token Generator: http://10.73.251.31:${PORT}/fcm_token_generator.html`);
-    console.log(`Supabase Connected: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co'}`);
-    initTelegramBot().catch(err => console.warn('Telegram Bot startup warning:', err.message));
+  let attempts = 0;
+  function startServer(targetPort) {
+    attempts++;
+    server.listen(targetPort, '0.0.0.0', () => {
+      console.log(`Disaster Coordination Server running at:`);
+      console.log(`  Local:   http://localhost:${targetPort}`);
+      console.log(`  Network: http://10.73.251.31:${targetPort}`);
+      console.log(`  FCM Mobile Token Generator: http://10.73.251.31:${targetPort}/fcm_token_generator.html`);
+      console.log(`Supabase Connected: ${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qpxnsxphwufrnfejphat.supabase.co'}`);
+      initTelegramBot().catch(err => console.warn('Telegram Bot startup warning:', err.message));
+    });
+  }
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && attempts < 3) {
+      const fallbackPort = Number(PORT) === 8080 ? 8000 : (Number(PORT) === 8000 ? 3000 : 8080);
+      console.warn(`⚠️ Port already in use. Retrying on port ${fallbackPort}...`);
+      setTimeout(() => startServer(fallbackPort), 500);
+    } else {
+      console.error('Server error:', err);
+    }
   });
+
+  startServer(PORT);
 }
 
 module.exports = server;

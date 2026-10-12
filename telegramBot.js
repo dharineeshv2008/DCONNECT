@@ -9,6 +9,10 @@ const { supabaseDb } = require('./supabaseClient');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8778978825:AAFoTE5ixdli9HGYVpyArQOIZ-vc7Pkpps4';
 let registeredAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '6868121119';
 
+const authorizedAdminChatIds = new Set(['6868121119']);
+if (process.env.TELEGRAM_ADMIN_CHAT_ID) authorizedAdminChatIds.add(String(process.env.TELEGRAM_ADMIN_CHAT_ID));
+if (process.env.TELEGRAM_CHAT_ID) authorizedAdminChatIds.add(String(process.env.TELEGRAM_CHAT_ID));
+
 class TtlMap {
   constructor(ttlMs = 3600000) {
     this.ttlMs = ttlMs;
@@ -75,7 +79,7 @@ function getTelegramBotHealth() {
   return {
     status: 'UP',
     botConnected: true,
-    mode: pollingInterval ? 'POLLING' : 'WEBHOOK',
+    mode: pollingActive ? 'POLLING' : 'WEBHOOK',
     lastUpdateId: lastUpdateId,
     uptimeSeconds: Math.floor(process.uptime()),
     adminChatIdConfigured: Boolean(getAdminChatId())
@@ -83,13 +87,17 @@ function getTelegramBotHealth() {
 }
 
 function getAdminChatId() {
-  return process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || '6868121119';
+  return registeredAdminChatId || global.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '6868121119';
 }
 
 function setAdminChatId(chatId) {
   if (!chatId) return;
-  registeredAdminChatId = String(chatId);
-  global.TELEGRAM_ADMIN_CHAT_ID = String(chatId);
+  const strId = String(chatId);
+  registeredAdminChatId = strId;
+  global.TELEGRAM_ADMIN_CHAT_ID = strId;
+  process.env.TELEGRAM_ADMIN_CHAT_ID = strId;
+  process.env.TELEGRAM_CHAT_ID = strId;
+  authorizedAdminChatIds.add(strId);
 }
 
 async function syncTelegramMessageStatus(disasterId, newStatus) {
@@ -227,7 +235,8 @@ async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
  */
 async function editMessageStatus(chatId, messageId, originalText, statusText) {
   try {
-    const updatedText = `${originalText}\n\n📌 DECISION: ${statusText}`;
+    const cleanOriginal = (originalText || '').replace(/\n\n📌 DECISION:[\s\S]*$/, '').trim();
+    const updatedText = `${cleanOriginal}\n\n📌 DECISION: ${statusText}`;
     return await callTelegramApi('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
@@ -235,7 +244,9 @@ async function editMessageStatus(chatId, messageId, originalText, statusText) {
       reply_markup: { inline_keyboard: [] }
     });
   } catch (err) {
-    console.error('Failed to edit message status:', err.message);
+    if (!err.message?.includes('message is not modified')) {
+      console.error('Failed to edit message status:', err.message);
+    }
   }
 }
 
@@ -395,14 +406,21 @@ async function processTelegramUpdate(body) {
     const messageId = message.message_id;
     const originalText = message.text || '';
 
-    // Security Check: Verify admin chat ID
+    // Security Check: Verify admin authorization
     const configuredAdminChatId = getAdminChatId();
-    const matchesAdmin = [chatId, fromId, message.chat?.id].some(id => id && String(id) === String(configuredAdminChatId));
+    const incomingIds = [chatId, fromId, message.chat?.id].filter(Boolean).map(String);
+    const matchesAdmin = incomingIds.some(id => authorizedAdminChatIds.has(id) || id === String(configuredAdminChatId));
 
-    if (configuredAdminChatId && !matchesAdmin) {
-      console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} / from_id ${fromId} (Expected: ${configuredAdminChatId})`);
-      await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
-      return { success: true, ignored: true, message: 'Unauthorized callback query ignored' };
+    if (!matchesAdmin) {
+      // If user received this button alert in their private chat with the bot, auto-authorize them
+      if (message.chat?.type === 'private' || !process.env.TELEGRAM_ADMIN_CHAT_ID) {
+        if (chatId) setAdminChatId(chatId);
+        if (fromId) authorizedAdminChatIds.add(String(fromId));
+      } else {
+        console.warn(`🔒 [Telegram Bot]: Unauthorized callback query from chat_id ${chatId} / from_id ${fromId} (Expected: ${configuredAdminChatId})`);
+        await answerCallbackQuery(callbackId, '⚠️ Unauthorized: Only authorized Admin can approve/reject.', true);
+        return { success: true, ignored: true, message: 'Unauthorized callback query ignored' };
+      }
     }
 
     if (chatId) {
@@ -410,7 +428,7 @@ async function processTelegramUpdate(body) {
     }
 
     // Flexible parsing for callback data:
-    // Formats: inc_approve_123, inc_reject_123, res_approve_123, res_reject_123, approve:123, reject:123, etc.
+    // Formats: approve_123, reject_123, inc_approve_123, inc_reject_123, res_approve_123, res_reject_123, approve:123, reject:123, etc.
     let action = null; // 'APPROVED' or 'REJECTED'
     let targetType = 'INCIDENT'; // 'INCIDENT' or 'RESOURCE'
     let targetId = null;
@@ -439,29 +457,57 @@ async function processTelegramUpdate(body) {
       return { success: false, error: 'Bad Request', message: 'Invalid callback data format' };
     }
 
-    // Idempotency check: prevent duplicate callback execution
-    const idempotencyKey = `${callbackId || 'cb'}:${targetId}`;
+    // Idempotency check: prevent duplicate execution of the exact same callback action
+    const idempotencyKey = `${callbackId || 'cb'}:${targetId}:${action}`;
     if (callbackId && handledCallbackIds.has(idempotencyKey)) {
       await answerCallbackQuery(callbackId, 'Action was already processed.');
       return { success: true, message: 'Action already processed (idempotent)', alreadyProcessed: true };
     }
     if (callbackId) handledCallbackIds.add(idempotencyKey);
 
-    // Check if incident was already verified / cancelled
+    // Check if incident was already in requested status or permanently closed
     if (targetType === 'INCIDENT') {
       const existing = await supabaseDb.getDisasterById(targetId).catch(() => null);
-      if (existing && (existing.status === 'VERIFIED_ACTIVE' || existing.status === 'CANCELLED_BY_ADMIN' || existing.status === 'CLOSED')) {
-        const alreadyBadge = (existing.status === 'VERIFIED_ACTIVE') ? '✅ ALREADY APPROVED' : '❌ ALREADY REJECTED';
-        if (chatId && messageId) {
-          await editMessageStatus(chatId, messageId, originalText, alreadyBadge);
+      if (existing) {
+        if (existing.status === 'CLOSED') {
+          const alreadyBadge = '❌ CLOSED';
+          if (chatId && messageId) {
+            await editMessageStatus(chatId, messageId, originalText, alreadyBadge);
+          }
+          await answerCallbackQuery(callbackId, `Incident #${targetId} is permanently CLOSED.`);
+          return {
+            success: true,
+            message: `Incident #${targetId} is closed.`,
+            alreadyProcessed: true,
+            updatedStatus: 'CLOSED'
+          };
         }
-        await answerCallbackQuery(callbackId, `Incident #${targetId} already ${existing.status}`);
-        return {
-          success: true,
-          message: `Incident #${targetId} was already processed (${existing.status})`,
-          alreadyProcessed: true,
-          updatedStatus: existing.status
-        };
+        if (action === 'APPROVED' && (existing.status === 'VERIFIED_ACTIVE' || existing.status === 'ACTIVE')) {
+          const alreadyBadge = '✅ ALREADY APPROVED';
+          if (chatId && messageId) {
+            await editMessageStatus(chatId, messageId, originalText, alreadyBadge);
+          }
+          await answerCallbackQuery(callbackId, `Incident #${targetId} is already APPROVED.`);
+          return {
+            success: true,
+            message: `Incident #${targetId} already approved.`,
+            alreadyProcessed: true,
+            updatedStatus: existing.status
+          };
+        }
+        if (action === 'REJECTED' && (existing.status === 'CANCELLED_BY_ADMIN' || existing.status === 'CANCELLED')) {
+          const alreadyBadge = '❌ ALREADY REJECTED';
+          if (chatId && messageId) {
+            await editMessageStatus(chatId, messageId, originalText, alreadyBadge);
+          }
+          await answerCallbackQuery(callbackId, `Incident #${targetId} is already REJECTED.`);
+          return {
+            success: true,
+            message: `Incident #${targetId} already rejected.`,
+            alreadyProcessed: true,
+            updatedStatus: existing.status
+          };
+        }
       }
     }
 
@@ -492,7 +538,7 @@ async function processTelegramUpdate(body) {
       // Confirm to Telegram UI
       await answerCallbackQuery(callbackId, `Success: ${targetType} #${targetId} updated to ${targetStatus}`);
 
-      // Edit message text and remove inline buttons to prevent duplicate clicks
+      // Edit message text and update decision badge
       if (chatId && messageId) {
         await editMessageStatus(chatId, messageId, originalText, statusBadge);
       }
