@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSupabaseRealtime();
   registerServiceWorker();
   restoreSession();
+  initSidebar();
   initFCM(); // Generate & store real FCM token immediately on app load
 
   // Initialize iOS Liquid Glass Role Slider
@@ -398,140 +399,6 @@ async function registerDeviceToken(userId = null) {
   return await initFCM(userId || (currentUser ? currentUser.id : null));
 }
 
-// ==============================================================================
-// 📱 DEVELOPER DEBUG FEATURE: GET MY DEVICE TOKEN
-// ==============================================================================
-
-async function openGetMyDeviceTokenModal() {
-  if (window.AndroidFCM && typeof window.AndroidFCM.showDeviceTokenDialog === 'function') {
-    window.AndroidFCM.showDeviceTokenDialog();
-    return;
-  }
-
-  openModal('getDeviceTokenModal');
-  const existingToken = localStorage.getItem('fcm_token');
-  const txtBox = document.getElementById('fcmTokenDisplayBox');
-  const errBox = document.getElementById('fcmTokenErrorBox');
-  const statusLog = document.getElementById('fcmStatusLog');
-
-  if (errBox) errBox.innerHTML = '';
-  if (statusLog) statusLog.textContent = 'Ready. Click "Fetch Device FCM Token" or auto-fetching...';
-
-  if (existingToken && existingToken.length >= 100) {
-    if (txtBox) txtBox.value = existingToken;
-    console.log("Existing Token generated:", existingToken);
-  } else {
-    await fetchMyDeviceFcmToken();
-  }
-}
-
-async function fetchMyDeviceFcmToken() {
-  const txtBox = document.getElementById('fcmTokenDisplayBox');
-  const errBox = document.getElementById('fcmTokenErrorBox');
-  const statusLog = document.getElementById('fcmStatusLog');
-
-  if (errBox) errBox.innerHTML = '';
-  if (statusLog) statusLog.textContent = '⏳ Requesting notification permission & fetching FCM Token...';
-  if (txtBox) txtBox.value = 'Fetching token from Firebase Messaging...';
-
-  try {
-    const token = await initFCM(currentUser ? currentUser.id : null);
-    if (!token || token.length < 50) {
-      const stored = localStorage.getItem('fcm_token');
-      if (stored && stored.length >= 100) {
-        if (txtBox) txtBox.value = stored;
-        if (statusLog) statusLog.textContent = '✅ Token fetched from local storage!';
-        console.log("Token generated:", stored);
-        return stored;
-      }
-      throw new Error('FCM Token generation returned null or invalid length.');
-    }
-
-    if (txtBox) txtBox.value = token;
-    if (statusLog) statusLog.textContent = '✅ Real FCM Token generated successfully!';
-    console.log("Token generated:", token);
-    return token;
-  } catch (err) {
-    console.error('Fetch FCM Token Error:', err);
-    if (txtBox) txtBox.value = '';
-    if (statusLog) statusLog.textContent = '❌ Token generation failed.';
-    if (errBox) {
-      errBox.innerHTML = `<div class="alert alert-danger" style="padding: 8px 12px; font-size: 0.85rem;">⚠️ Failed to generate FCM Token: ${err.message || 'Notification permission denied or network error.'}</div>`;
-    }
-    return null;
-  }
-}
-
-async function copyFcmTokenToClipboard() {
-  const txtBox = document.getElementById('fcmTokenDisplayBox');
-  const token = (txtBox ? txtBox.value : '').trim();
-
-  if (!token || token.startsWith('Click') || token.startsWith('Fetching')) {
-    showToast('Copy Failed', 'No valid FCM Token to copy. Please click Fetch Token first.', 'warning');
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(token);
-    showToast('Token Copied', 'FCM Device Token copied to clipboard! 📋', 'success');
-    console.log("FCM Token copied to clipboard successfully.");
-  } catch (e) {
-    if (txtBox) {
-      txtBox.select();
-      document.execCommand('copy');
-    }
-    showToast('Token Copied', 'FCM Device Token copied to clipboard! 📋', 'success');
-  }
-}
-
-async function sendFcmTokenToServer() {
-  const txtBox = document.getElementById('fcmTokenDisplayBox');
-  const token = (txtBox ? txtBox.value : '').trim();
-  const statusLog = document.getElementById('fcmStatusLog');
-  const errBox = document.getElementById('fcmTokenErrorBox');
-
-  if (errBox) errBox.innerHTML = '';
-  if (!token || token.length < 50 || token.startsWith('Click')) {
-    if (errBox) errBox.innerHTML = `<div class="alert alert-warning" style="padding: 8px 12px; font-size: 0.85rem;">⚠️ Please fetch a valid FCM Token before sending to server.</div>`;
-    return;
-  }
-
-  const userId = currentUser ? currentUser.id : null;
-  const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'android' : 'web';
-
-  console.log("Token generated:", token);
-  console.log(`Sending token to backend /save-token (userId: ${userId}, device_type: ${deviceType})...`);
-  if (statusLog) statusLog.textContent = '📡 Sending FCM Token to backend API...';
-
-  try {
-    const response = await fetch('/api/save-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: userId,
-        token: token,
-        fcm_token: token,
-        device_type: deviceType
-      })
-    });
-
-    const result = await response.json();
-    console.log("Backend response:", result);
-
-    if (response.ok && result.success) {
-      if (statusLog) statusLog.textContent = '✅ Token saved in Supabase DB! Auto test push triggered!';
-      showToast('Token Saved', 'FCM Token registered in Supabase! Test push notification sent ✅', 'success');
-    } else {
-      throw new Error(result.message || result.detail || 'Backend API error');
-    }
-  } catch (err) {
-    console.error("Backend response error:", err.message);
-    if (statusLog) statusLog.textContent = '❌ Failed to save token on backend server.';
-    if (errBox) {
-      errBox.innerHTML = `<div class="alert alert-danger" style="padding: 8px 12px; font-size: 0.85rem;">❌ Failed to send token to server: ${err.message}</div>`;
-    }
-  }
-}
 
 function handleApiError(err, fallbackMessage = 'An unexpected error occurred') {
   console.error('API Error:', err);
@@ -810,16 +677,36 @@ function updateUserUI() {
   const roleBadge = document.getElementById('userBadgeRole');
   const nameDisp = document.getElementById('userNameDisplay');
   const adminNav = document.getElementById('adminNavBtn');
+  const sidebarName = document.getElementById('sidebarUserNameDisplay');
+  const sidebarBadge = document.getElementById('sidebarUserRoleBadge');
+  const sidebarAvatar = document.getElementById('sidebarAvatarInitial');
+  const sidebarAdminLabel = document.getElementById('sidebarAdminSectionLabel');
 
   if (currentUser) {
-    roleBadge.textContent = currentUser.role;
-    roleBadge.className = `badge badge-${currentUser.role.toLowerCase().replace('_', '')}`;
-    nameDisp.textContent = currentUser.name + (currentUser.organizationName ? ` (${currentUser.organizationName})` : '');
+    const roleName = currentUser.role || 'USER';
+    const displayName = currentUser.name + (currentUser.organizationName ? ` (${currentUser.organizationName})` : '');
 
-    if (hasAdminPrivileges(currentUser)) {
-      adminNav.style.display = 'block';
-    } else {
-      adminNav.style.display = 'none';
+    if (roleBadge) {
+      roleBadge.textContent = roleName;
+      roleBadge.className = `badge badge-${roleName.toLowerCase().replace('_', '')}`;
+    }
+    if (nameDisp) nameDisp.textContent = displayName;
+
+    if (sidebarName) sidebarName.textContent = displayName;
+    if (sidebarBadge) {
+      sidebarBadge.textContent = roleName;
+      sidebarBadge.className = `badge badge-${roleName.toLowerCase().replace('_', '')}`;
+    }
+    if (sidebarAvatar) {
+      sidebarAvatar.textContent = (currentUser.name || 'U').charAt(0).toUpperCase();
+    }
+
+    const isAdmin = hasAdminPrivileges(currentUser);
+    if (adminNav) {
+      adminNav.style.display = isAdmin ? 'flex' : 'none';
+    }
+    if (sidebarAdminLabel) {
+      sidebarAdminLabel.style.display = isAdmin ? 'block' : 'none';
     }
 
     if (!currentUser.approved && (currentUser.role === 'NGO' || currentUser.role === 'GOVERNMENT_AGENCY')) {
@@ -879,9 +766,11 @@ async function handleLandingLogin(e) {
     return;
   }
 
+  // Prevent duplicate submissions and display "Signing in..."
   submitBtn.disabled = true;
+  submitBtn.classList.add('is-loading');
   if (spinner) spinner.style.display = 'inline-block';
-  if (btnText) btnText.textContent = 'Verifying...';
+  if (btnText) btnText.textContent = 'Signing in...';
 
   try {
     const data = await fetchAPI('/auth/login', {
@@ -911,13 +800,11 @@ async function handleLandingLogin(e) {
     alertBox.innerHTML = `<div class="alert alert-danger" style="padding: 8px 12px; font-size: 0.82rem;">${err.message || 'Invalid credentials. Please check your phone and password.'}</div>`;
   } finally {
     submitBtn.disabled = false;
+    submitBtn.classList.remove('is-loading');
     if (spinner) spinner.style.display = 'none';
     if (btnText) btnText.textContent = 'Login ➔';
   }
 }
-
-
-
 
 function updateRoleBadge(roleTitle, roleDesc) {
   const badge = document.getElementById('role-badge');
@@ -929,12 +816,32 @@ function updateRoleBadge(roleTitle, roleDesc) {
 async function handleRegister(e) {
   e.preventDefault();
   const alertBox = document.getElementById('registerAlertBox');
+  const submitBtn = document.getElementById('registerSubmitBtn');
+  const spinner = document.getElementById('registerBtnSpinner');
+  const btnText = document.getElementById('registerBtnText');
   alertBox.innerHTML = '';
 
+  const name = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const password = document.getElementById('regPassword').value;
+
+  if (!name || !phone || !password) {
+    alertBox.innerHTML = '<div class="alert alert-danger">Please fill in all required fields.</div>';
+    return;
+  }
+
+  // Disable duplicate submissions and display "Creating your account..."
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('is-loading');
+  }
+  if (spinner) spinner.style.display = 'inline-block';
+  if (btnText) btnText.textContent = 'Creating your account...';
+
   const payload = {
-    name: document.getElementById('regName').value.trim(),
-    phone: document.getElementById('regPhone').value.trim(),
-    password: document.getElementById('regPassword').value,
+    name,
+    phone,
+    password,
     role: document.getElementById('regRole').value,
     organizationName: document.getElementById('regOrgName').value.trim() || null,
     organizationRegNo: document.getElementById('regOrgRegNo').value.trim() || null,
@@ -969,7 +876,15 @@ async function handleRegister(e) {
       switchTab('feedTab');
     }
   } catch (err) {
+    // Preserve entered form inputs on failure (do NOT clear fields)
     alertBox.innerHTML = `<div class="alert alert-danger">${err.message || 'Registration error.'}</div>`;
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('is-loading');
+    }
+    if (spinner) spinner.style.display = 'none';
+    if (btnText) btnText.textContent = 'Complete Registration';
   }
 }
 
@@ -1032,7 +947,9 @@ function handleDoubleConfirmStep1Continue() {
   openModal('doubleConfirmStep2Modal');
 }
 
-function handleDoubleConfirmStep2Submit(e) {
+let isSubmittingDisaster = false;
+
+async function handleDoubleConfirmStep2Submit(e) {
   e.preventDefault();
   const textVal = (document.getElementById('doubleConfirmTextInput')?.value || '').trim();
   if (textVal !== 'CONFIRM') {
@@ -1040,12 +957,46 @@ function handleDoubleConfirmStep2Submit(e) {
     return;
   }
 
-  closeModal('doubleConfirmStep2Modal');
+  if (isSubmittingDisaster) return; // Prevent accidental duplicate reports
+
+  const confirmBtn = document.getElementById('doubleConfirmSubmitBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+    confirmBtn.classList.add('is-loading');
+    confirmBtn.innerHTML = '<span class="loading-spinner loading-spinner-sm" style="margin-right: 6px;"></span>Submitting incident report...';
+  }
+
+  const reportBtn = document.getElementById('reportSubmitBtn');
+  if (reportBtn) {
+    reportBtn.disabled = true;
+    reportBtn.classList.add('is-loading');
+    reportBtn.innerHTML = '<span class="loading-spinner loading-spinner-sm" style="margin-right: 6px;"></span>Submitting incident report...';
+  }
+
+  isSubmittingDisaster = true;
 
   if (typeof pendingDoubleConfirmCallback === 'function') {
     const callback = pendingDoubleConfirmCallback;
     pendingDoubleConfirmCallback = null;
-    callback();
+    try {
+      await callback();
+    } finally {
+      isSubmittingDisaster = false;
+      closeModal('doubleConfirmStep2Modal');
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('is-loading');
+        confirmBtn.innerHTML = 'Authorize & Execute';
+      }
+      if (reportBtn) {
+        reportBtn.disabled = false;
+        reportBtn.classList.remove('is-loading');
+        reportBtn.innerHTML = '🚨 Dispatch Incident Report';
+      }
+    }
+  } else {
+    isSubmittingDisaster = false;
+    closeModal('doubleConfirmStep2Modal');
   }
 }
 
@@ -1136,6 +1087,11 @@ async function loadDisasters() {
   let url = `/disasters?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}`;
   if (statusFilter) url += `&status=${statusFilter}`;
 
+  // Show skeleton loader on initial/fresh load
+  if (!container.querySelector('.disaster-card')) {
+    container.innerHTML = renderIncidentSkeleton(3);
+  }
+
   try {
     const data = await fetchAPI(url);
     let list = data.data || [];
@@ -1155,8 +1111,18 @@ async function loadDisasters() {
       return true;
     });
 
+    const pill = document.getElementById('liveDisasterCountPill');
+    if (pill) pill.textContent = list.length;
+
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 30px; font-weight: 600;">No active disasters currently</p>`;
+      container.innerHTML = `
+        <div class="empty-state-card">
+          <span class="empty-state-icon">🛡️</span>
+          <h3 class="empty-state-title">No Active Disasters Currently</h3>
+          <p class="empty-state-desc">All emergency sectors are currently normal and calm. Click Refresh GPS or change filters to check other locations.</p>
+          <p style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">No active disasters currently</p>
+        </div>
+      `;
       return;
     }
 
@@ -1297,6 +1263,10 @@ async function loadVolunteerAssignments() {
   const container = document.getElementById('volunteerAssignmentsList');
   if (!container) return;
 
+  if (!container.children.length || container.textContent.includes('Loading')) {
+    container.innerHTML = renderMissionSkeleton(2);
+  }
+
   let url = '/volunteers/assignments';
 
   try {
@@ -1321,7 +1291,7 @@ async function loadVolunteerAssignments() {
         ${currentUser && (currentUser.id === a.volunteerId || currentUser.role === 'ADMIN' || currentUser.role === 'NGO') ? `
           <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 0.8rem; font-weight: 700;">Status:</label>
-            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem;" onchange="updateMissionStatus(${a.id}, this.value)">
+            <select class="form-control" style="width: 150px; padding: 4px 8px; font-size: 0.82rem;" onchange="updateMissionStatus(${a.id}, this.value, this)">
               <option value="ASSIGNED" ${a.status === 'ASSIGNED' ? 'selected' : ''}>ASSIGNED</option>
               <option value="IN_PROGRESS" ${a.status === 'IN_PROGRESS' ? 'selected' : ''}>IN_PROGRESS</option>
               <option value="COMPLETED" ${a.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED</option>
@@ -1336,7 +1306,11 @@ async function loadVolunteerAssignments() {
   }
 }
 
-async function updateMissionStatus(assignmentId, newStatus) {
+async function updateMissionStatus(assignmentId, newStatus, selectEl) {
+  if (selectEl) {
+    selectEl.disabled = true;
+    selectEl.style.opacity = '0.6';
+  }
   try {
     const data = await fetchAPI(`/volunteers/assignments/${assignmentId}/status`, {
       method: 'PATCH',
@@ -1346,12 +1320,21 @@ async function updateMissionStatus(assignmentId, newStatus) {
     loadVolunteerAssignments();
   } catch (err) {
     handleApiError(err);
+  } finally {
+    if (selectEl) {
+      selectEl.disabled = false;
+      selectEl.style.opacity = '1';
+    }
   }
 }
 
 async function loadVolunteersDirectory() {
   const container = document.getElementById('volunteersDirectoryList');
   if (!container) return;
+
+  if (!container.children.length || container.textContent.includes('Loading')) {
+    container.innerHTML = renderMissionSkeleton(2);
+  }
 
   try {
     let data;
@@ -1470,11 +1453,22 @@ async function loadResources() {
   const container = document.getElementById('resourcePoolList');
   if (!container) return;
 
+  if (!container.children.length || container.textContent.includes('Loading')) {
+    container.innerHTML = renderResourceSkeleton(3);
+  }
+
   try {
     const data = await fetchAPI('/resources/list');
     const list = data.data || [];
     if (list.length === 0) {
-      container.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 20px;">No supplies currently in the emergency pool.</p>`;
+      container.innerHTML = `
+        <div class="empty-state-card">
+          <span class="empty-state-icon">📦</span>
+          <h3 class="empty-state-title">No Emergency Supplies in Pool</h3>
+          <p class="empty-state-desc">The supply pool is currently empty. Use the form to contribute essential food, water, or medical kits.</p>
+          <p style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">No supplies currently in the emergency pool.</p>
+        </div>
+      `;
       return;
     }
 
@@ -1516,9 +1510,12 @@ async function loadResources() {
   }
 }
 
+let isSubmittingResource = false;
+
 async function handleResourceSubmit(e) {
   e.preventDefault();
   if (!currentUser) return;
+  if (isSubmittingResource) return; // Prevent duplicate submissions
 
   const desc = document.getElementById('resDescription')?.value.trim();
   const noExpiryChecked = document.getElementById('resNoExpiryToggle')?.checked;
@@ -1558,6 +1555,9 @@ async function handleResourceSubmit(e) {
     contactPhone: document.getElementById('resPhone').value.trim() || currentUser.phone
   };
 
+  isSubmittingResource = true;
+  setButtonLoading('resourceSubmitBtn', true, 'Adding to Supply Pool...', 'Add to Supply Pool');
+
   try {
     await fetchAPI('/resources/create', {
       method: 'POST',
@@ -1571,6 +1571,9 @@ async function handleResourceSubmit(e) {
     loadResources();
   } catch (err) {
     showToast('Creation Failed', err.message || 'Failed to post resource.', 'error');
+  } finally {
+    isSubmittingResource = false;
+    setButtonLoading('resourceSubmitBtn', false, 'Adding to Supply Pool...', 'Add to Supply Pool');
   }
 }
 
@@ -2417,8 +2420,8 @@ async function loadAdminPendingUsers() {
           Contact: <strong>${escapeHtml(u.name)}</strong> (${escapeHtml(u.phone)}) | Reg No: ${escapeHtml(u.organizationRegNo || 'N/A')}
         </div>
         <div style="margin-top: 8px; display: flex; gap: 8px;">
-          <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED')">✓ Approve Account</button>
-          <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED')">✕ Reject</button>
+          <button class="btn btn-success btn-sm" onclick="adminApproveUser(${u.id}, 'APPROVED', this)">✓ Approve Account</button>
+          <button class="btn btn-outline btn-sm" onclick="adminApproveUser(${u.id}, 'REJECTED', this)">✕ Reject</button>
         </div>
       </div>
     `).join('');
@@ -2427,7 +2430,8 @@ async function loadAdminPendingUsers() {
   }
 }
 
-async function adminApproveUser(userId, action) {
+async function adminApproveUser(userId, action, btnEl) {
+  if (btnEl) setButtonLoading(btnEl, true, action === 'APPROVED' ? 'Approving...' : 'Rejecting...');
   try {
     await fetchAPI('/admin/approve-user', {
       method: 'POST',
@@ -2443,6 +2447,8 @@ async function adminApproveUser(userId, action) {
     loadAdminData();
   } catch (err) {
     handleApiError(err);
+  } finally {
+    if (btnEl) setButtonLoading(btnEl, false);
   }
 }
 
@@ -2469,8 +2475,8 @@ async function loadAdminPendingDisasters() {
           📍 ${escapeHtml(d.locationName || '')} (${d.latitude}, ${d.longitude}) | Aggregated Reports: ${d.reportCount}
         </div>
         <div style="margin-top: 8px; display: flex; gap: 8px;">
-          <button class="btn btn-success btn-sm" onclick="adminApproveDisaster(${d.id}, 'APPROVED')">✓ Verify & Publish</button>
-          <button class="btn btn-outline btn-sm" onclick="adminApproveDisaster(${d.id}, 'REJECTED')">✕ Close</button>
+          <button class="btn btn-success btn-sm" onclick="adminApproveDisaster(${d.id}, 'APPROVED', this)">✓ Verify & Publish</button>
+          <button class="btn btn-outline btn-sm" onclick="adminApproveDisaster(${d.id}, 'REJECTED', this)">✕ Close</button>
         </div>
       </div>
     `).join('');
@@ -2479,7 +2485,8 @@ async function loadAdminPendingDisasters() {
   }
 }
 
-async function adminApproveDisaster(disasterId, action) {
+async function adminApproveDisaster(disasterId, action, btnEl) {
+  if (btnEl) setButtonLoading(btnEl, true, action === 'APPROVED' ? 'Verifying...' : 'Closing...');
   try {
     await fetchAPI('/admin/approve-disaster', {
       method: 'POST',
@@ -2496,6 +2503,8 @@ async function adminApproveDisaster(disasterId, action) {
     loadDisasters();
   } catch (err) {
     handleApiError(err);
+  } finally {
+    if (btnEl) setButtonLoading(btnEl, false);
   }
 }
 
@@ -2504,6 +2513,7 @@ async function adminApproveDisaster(disasterId, action) {
 // ==============================================================================
 
 function switchTab(tabId) {
+  closeMobileSidebar();
   hideAllErrorViews();
   hideAllTabs();
 
@@ -2513,8 +2523,21 @@ function switchTab(tabId) {
   }
 
   document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-  const activeBtn = Array.from(document.querySelectorAll('.nav-btn')).find(b => b.getAttribute('onclick')?.includes(tabId));
-  if (activeBtn) activeBtn.classList.add('active');
+  const activeBtns = Array.from(document.querySelectorAll('.nav-btn')).filter(b => b.getAttribute('onclick')?.includes(tabId));
+  activeBtns.forEach(btn => btn.classList.add('active'));
+
+  // Update desktop breadcrumb title
+  const topbarTitle = document.getElementById('topbarActiveTitle');
+  if (topbarTitle) {
+    const titles = {
+      'feedTab': 'Live Disasters',
+      'reportTab': 'Report Incident',
+      'volunteerTab': 'Volunteer Missions',
+      'resourceTab': 'Emergency Resources',
+      'adminTab': 'Admin Control Center'
+    };
+    topbarTitle.textContent = titles[tabId] || 'Coordination';
+  }
 
   if (tabId === 'feedTab') loadDisasters();
   if (tabId === 'volunteerTab') loadVolunteerData();
@@ -2552,4 +2575,169 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ==============================================================================
+// 13. SIDEBAR NAVIGATION & COLLAPSE CONTROLS
+// ==============================================================================
+
+function initSidebar() {
+  const isCollapsed = localStorage.getItem('dconnect_sidebar_collapsed') === 'true';
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar && isCollapsed && window.innerWidth > 900) {
+    sidebar.classList.add('collapsed');
+  }
+
+  // Keyboard accessibility: Escape key closes mobile sidebar & active modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeMobileSidebar();
+      const activeModal = document.querySelector('.modal-overlay.active');
+      if (activeModal && activeModal.id) {
+        closeModal(activeModal.id);
+      }
+    }
+  });
+
+  // Responsive resize handler
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) {
+      closeMobileSidebar();
+    }
+  });
+}
+
+function toggleSidebarCollapse() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.toggle('collapsed');
+  localStorage.setItem('dconnect_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+}
+
+function openMobileSidebar() {
+  const sidebar = document.getElementById('appSidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.add('mobile-open');
+  if (backdrop) backdrop.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('appSidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+  if (backdrop) backdrop.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function scrollToResourcePool() {
+  setTimeout(() => {
+    const pool = document.getElementById('resourcePoolList');
+    if (pool) pool.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+// ==============================================================================
+// 14. GLOBAL REUSABLE LOADING SYSTEM & SKELETON HELPERS
+// ==============================================================================
+
+function setButtonLoading(btnOrId, isLoading, loadingText, defaultText) {
+  const btn = typeof btnOrId === 'string' ? document.getElementById(btnOrId) : btnOrId;
+  if (!btn) return;
+
+  if (isLoading) {
+    if (!btn.dataset.originalHtml) {
+      btn.dataset.originalHtml = btn.innerHTML;
+    }
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    btn.innerHTML = `<span class="loading-spinner loading-spinner-sm" style="margin-right: 8px;"></span><span>${escapeHtml(loadingText || 'Loading...')}</span>`;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    if (defaultText) {
+      btn.innerHTML = defaultText;
+    } else if (btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+    }
+  }
+}
+
+function renderIncidentSkeleton(count = 3) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `
+      <div class="skeleton-card">
+        <div class="skeleton-card-header">
+          <span class="skeleton-box skeleton-pill"></span>
+          <span class="skeleton-box" style="width: 70px; height: 16px; border-radius: 4px;"></span>
+        </div>
+        <div class="skeleton-box skeleton-title"></div>
+        <div class="skeleton-box skeleton-desc"></div>
+        <div class="skeleton-box skeleton-desc-sub"></div>
+        <div class="skeleton-footer">
+          <span class="skeleton-box" style="width: 100px; height: 28px; border-radius: 6px;"></span>
+          <span class="skeleton-box" style="width: 90px; height: 28px; border-radius: 6px;"></span>
+        </div>
+      </div>
+    `;
+  }
+  return html;
+}
+
+function renderMissionSkeleton(count = 3) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `
+      <div class="skeleton-card" style="padding: 14px;">
+        <div class="skeleton-card-header">
+          <span class="skeleton-box skeleton-title" style="width: 50%;"></span>
+          <span class="skeleton-box skeleton-pill" style="width: 60px;"></span>
+        </div>
+        <div class="skeleton-box skeleton-desc" style="width: 80%;"></div>
+        <div class="skeleton-box skeleton-desc-sub" style="width: 60%;"></div>
+      </div>
+    `;
+  }
+  return html;
+}
+
+function renderResourceSkeleton(count = 3) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `
+      <div class="skeleton-card" style="padding: 14px;">
+        <div class="skeleton-card-header">
+          <span class="skeleton-box skeleton-title" style="width: 45%;"></span>
+          <span class="skeleton-box skeleton-pill" style="width: 70px;"></span>
+        </div>
+        <div class="skeleton-box skeleton-desc" style="width: 85%;"></div>
+        <div class="skeleton-box skeleton-desc-sub" style="width: 50%;"></div>
+      </div>
+    `;
+  }
+  return html;
+}
+
+function renderTableSkeleton(rowCount = 4, colCount = 8) {
+  let html = '';
+  for (let r = 0; r < rowCount; r++) {
+    html += '<tr>';
+    for (let c = 0; c < colCount; c++) {
+      html += `<td><div class="skeleton-box skeleton-table-cell" style="width: ${c === 0 ? '40px' : (c === 1 ? '70px' : '90%')};"></div></td>`;
+    }
+    html += '</tr>';
+  }
+  return html;
+}
+
+function renderEmptyState(icon, title, desc, actionHtml = '') {
+  return `
+    <div class="empty-state-card">
+      <span class="empty-state-icon">${icon}</span>
+      <h3 class="empty-state-title">${escapeHtml(title)}</h3>
+      <p class="empty-state-desc">${escapeHtml(desc)}</p>
+      ${actionHtml}
+    </div>
+  `;
 }

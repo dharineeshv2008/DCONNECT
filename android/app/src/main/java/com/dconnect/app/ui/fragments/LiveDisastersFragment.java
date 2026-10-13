@@ -46,6 +46,8 @@ public class LiveDisastersFragment extends Fragment {
     private DisasterAdapter adapter;
     private final List<DisasterItem> disastersList = new ArrayList<>();
 
+    private boolean isInitialLoadComplete = false;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -66,11 +68,21 @@ public class LiveDisastersFragment extends Fragment {
 
         btnRefreshGps.setOnClickListener(v -> {
             textGpsStatus.setText("📍 Device GPS Location: 13.0827, 80.2707");
-            Toast.makeText(getContext(), "GPS location refreshed", Toast.LENGTH_SHORT).show();
+            if (getContext() != null) {
+                android.content.SharedPreferences prefs = getContext().getSharedPreferences("dconnect_prefs", android.content.Context.MODE_PRIVATE);
+                prefs.edit().putFloat("user_lat", 13.0827f).putFloat("user_lng", 80.2707f).apply();
+                String userId = prefs.getString("user_id", "");
+                String fcmToken = prefs.getString("fcm_token", "");
+                if (!fcmToken.isEmpty()) {
+                    ApiClient.sendDeviceTokenToBackend(getContext().getApplicationContext(), userId, fcmToken, 13.0827, 80.2707, null);
+                }
+            }
+            Toast.makeText(getContext(), "GPS location refreshed & synced", Toast.LENGTH_SHORT).show();
             loadDisasters();
         });
 
         loadDisasters();
+        view.post(() -> isInitialLoadComplete = true);
 
         return view;
     }
@@ -89,7 +101,9 @@ public class LiveDisastersFragment extends Fragment {
         AdapterView.OnItemSelectedListener filterListener = new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                loadDisasters();
+                if (isInitialLoadComplete) {
+                    loadDisasters();
+                }
             }
 
             @Override

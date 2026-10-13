@@ -38,6 +38,7 @@ public class AdminService {
     private final ApprovalLogRepository approvalLogRepository;
     private final NotificationService notificationService;
     private final DisasterService disasterService;
+    private final DisasterNotificationService disasterNotificationService;
 
     @Transactional
     public UserProfileDto approveOrRejectUser(UserApprovalRequest req) {
@@ -121,6 +122,16 @@ public class AdminService {
                     "Emergency Incident Verified: " + disaster.getTitle(),
                     String.format("Admin verified disaster #%d. Mobilizing volunteers and relief supplies.", disaster.getId()),
                     disaster
+            );
+
+            // Phase 3 Requirement: Location-based public alert triggered strictly after authorized admin approval (25 km radius)
+            disasterNotificationService.processDisasterNotificationAsync(
+                    disaster.getId(),
+                    disaster.getLatitude(),
+                    disaster.getLongitude(),
+                    disaster.getType(),
+                    disaster.getTitle(),
+                    25.0
             );
         }
 

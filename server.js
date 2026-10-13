@@ -106,31 +106,53 @@ function logForbiddenAttempt(req, reason, caller = null) {
   console.warn(`[AUTH 403] [CorrelationID: ${req.correlationId}] Path: ${req.url} Method: ${req.method} IP: ${ip} Token: ${maskedToken} UserID: ${caller?.id || 'ANON'} Role: ${caller?.role || 'NONE'} Reason: ${reason}`);
 }
 
-// FCM / Radius Alert Engine (Pillar 4)
-async function sendRadiusAlerts({ disasterId, latitude, longitude, severity, title, radiusKm = 30.0 }) {
+// FCM / Radius Alert Engine (Pillar 4 - 25 KM Strict Post-Approval Alert)
+async function sendRadiusAlerts({ disasterId, latitude, longitude, severity, title, radiusKm = 25.0 }) {
   const dLat = parseFloat(latitude);
   const dLng = parseFloat(longitude);
-  if (isNaN(dLat) || isNaN(dLng)) {
+  if (isNaN(dLat) || isNaN(dLng) || dLat < -90 || dLat > 90 || dLng < -180 || dLng > 180) {
+    console.warn(`[LOCATION ALERT] Invalid incident coordinates (${latitude}, ${longitude}). Proximity alert aborted.`);
     return { radiusKm, notifiedUsersCount: 0, notifiedUsers: [] };
   }
 
   const nearbyUsers = await supabaseDb.getUsersInRadius(dLat, dLng, radiusKm).catch(() => []);
   const notified = [];
+  const seenTokens = new Set();
+  const { exec } = require('child_process');
 
   for (const u of (nearbyUsers || [])) {
     const isRecent = await supabaseDb.wasNotificationSentRecently(u.id, disasterId, 60);
-    if (!isRecent) {
-      await supabaseDb.recordSentNotification(u.id, disasterId, calculateDistanceKm(dLat, dLng, u.home_lat, u.home_lng));
+    const dist = calculateDistanceKm(dLat, dLng, u.home_lat, u.home_lng);
+    if (!isRecent && dist <= radiusKm) {
+      await supabaseDb.recordSentNotification(u.id, disasterId, dist);
+      const userToken = (u.fcm_token || u.token || '').trim();
+
+      // Transmit real FCM notification if user has a valid device token
+      if (userToken && userToken.length >= 100 && !seenTokens.has(userToken)) {
+        seenTokens.add(userToken);
+        const alertTitle = `🚨 EMERGENCY ALERT: ${severity || 'INCIDENT'} Nearby`;
+        const alertBody = `${title || 'Emergency reported'} (${Math.round(dist * 10) / 10} km away). Stay alert.`;
+        const pyCmd = `python -c "from firebase_config import send_notification; res = send_notification(token='${userToken}', title='${alertTitle.replace(/'/g, "\\'")}', body='${alertBody.replace(/'/g, "\\'")}', data={'disasterId': '${disasterId || ''}', 'distanceKm': '${dist.toFixed(2)}', 'clickAction': 'OPEN_DISASTER_ALERT'}); print('MESSAGE_ID:' + str(res))"`;
+
+        exec(pyCmd, { cwd: __dirname }, (err, stdout, stderr) => {
+          if (err) {
+            console.warn(`[FCM ALERT ERROR] User ${u.id}:`, stderr || err.message);
+          } else {
+            console.log(`[FCM ALERT ACCEPTED] User ${u.id}: ${stdout.trim()}`);
+          }
+        });
+      }
+
       notified.push({
         id: u.id,
         name: u.name,
         phone: u.phone,
-        distanceKm: Math.round(calculateDistanceKm(dLat, dLng, u.home_lat, u.home_lng) * 10) / 10
+        distanceKm: Math.round(dist * 10) / 10
       });
     }
   }
 
-  console.log(`📡 Radius alert dispatched: ${notified.length} users notified within ${radiusKm}km of disaster #${disasterId}`);
+  console.log(`📡 [RADIUS ALERT 25KM] Dispatched: ${notified.length} eligible users (FCM devices: ${seenTokens.size}) within ${radiusKm}km of disaster #${disasterId}`);
   return {
     disasterId,
     radiusKm,
@@ -413,7 +435,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // FCM Device Token Registration Endpoint (Save Token & Location) - PART 3
-    if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/save-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token' || pathname === '/register-device-token' || pathname === '/register-token')) {
+    if (method === 'POST' && (pathname === '/api/save-token' || pathname === '/save-token' || pathname === '/api/save-device-token' || pathname === '/save-device-token' || pathname === '/api/users/device-token' || pathname === '/api/notifications/register-token' || pathname === '/register-device-token' || pathname === '/register-token')) {
       const body = await parseBody(req);
       const caller = await getAuthUser(req);
       const token = (body.fcmToken || body.fcm_token || body.token || '').toString().trim();
@@ -725,6 +747,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const token = registerUserSession(user);
+      res.setHeader('Set-Cookie', `token=${token}; Path=/; HttpOnly; SameSite=Lax`);
       return sendJson(res, 200, {
         success: true,
         message: 'Login successful.',
@@ -1196,6 +1219,19 @@ const server = http.createServer(async (req, res) => {
         'DISASTER',
         dbStatus === 'VERIFIED_ACTIVE' ? 'APPROVED' : 'REJECTED'
       );
+
+      // Phase 3 Requirement: Auto-trigger FCM 25km radius alert strictly upon admin approval
+      if (dbStatus === 'VERIFIED_ACTIVE') {
+        const dRec = updated || existing;
+        sendRadiusAlerts({
+          disasterId: incidentId,
+          latitude: dRec.latitude,
+          longitude: dRec.longitude,
+          severity: dRec.severity || 'HIGH',
+          title: dRec.title || 'Emergency Disaster Alert',
+          radiusKm: 25.0
+        }).catch(err => console.warn('[FCM Post-Approval Broadcast Error]:', err.message));
+      }
 
       return sendJson(res, 200, {
         success: true,

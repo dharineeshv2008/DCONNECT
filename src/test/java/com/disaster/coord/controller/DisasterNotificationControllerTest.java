@@ -49,7 +49,7 @@ class DisasterNotificationControllerTest {
                 .longitude(80.2707)
                 .type(DisasterType.FLOOD)
                 .title("Severe Inundation")
-                .radiusKm(30.0)
+                .radiusKm(25.0)
                 .build();
 
         DisasterNotificationResult mockResult = DisasterNotificationResult.builder()
@@ -61,13 +61,13 @@ class DisasterNotificationControllerTest {
                 .candidateUsersInBoundingBox(12)
                 .usersWithinRadius(8)
                 .notificationsSent(8)
-                .radiusKm(30.0)
+                .radiusKm(25.0)
                 .executionDurationMs(45)
                 .recipients(Collections.emptyList())
                 .build();
 
         when(notificationService.processDisasterNotification(
-                eq(10L), eq(13.0827), eq(80.2707), eq(DisasterType.FLOOD), eq("Severe Inundation"), eq(30.0)))
+                eq(10L), eq(13.0827), eq(80.2707), eq(DisasterType.FLOOD), eq("Severe Inundation"), eq(25.0)))
                 .thenReturn(mockResult);
 
         long start = System.currentTimeMillis();

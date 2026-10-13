@@ -53,3 +53,13 @@ disaster-app:
   merge:
     max-distance-km: 10.0
     time-window-hours: 3
+
+# Hugging Face Inference API Configuration
+huggingface:
+  api:
+    base-url: ${HF_BASE_URL:https://router.huggingface.co/v1}
+    token: ${HF_TOKEN:}
+    model-id: ${HF_MODEL_ID:Qwen/Qwen2.5-7B-Instruct}
+    connect-timeout-ms: ${HF_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${HF_READ_TIMEOUT_MS:15000}
+    max-retries: ${HF_MAX_RETRIES:2}

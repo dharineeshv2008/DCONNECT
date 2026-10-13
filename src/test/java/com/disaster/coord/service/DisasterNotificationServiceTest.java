@@ -47,6 +47,9 @@ class DisasterNotificationServiceTest {
     @Mock
     private FcmNotificationService fcmNotificationService;
 
+    @Mock
+    private FirebasePushSender firebasePushSender;
+
     @InjectMocks
     private DisasterNotificationService notificationService;
 
@@ -56,48 +59,48 @@ class DisasterNotificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(notificationService, "configuredRadiusKm", 30.0);
+        ReflectionTestUtils.setField(notificationService, "configuredRadiusKm", 25.0);
 
         // Disaster origin: Chennai Central (13.0827, 80.2707)
-        // User 1: Marina Beach (~3.8 km) - WITHIN 30 KM
+        // User 1: Marina Beach (~3.8 km) - WITHIN 25 KM
         nearbyUser1 = User.builder()
                 .id(101L)
                 .name("Arun Kumar")
                 .phone("9876543210")
-                .role(Role.CITIZEN)
+                .role(Role.USER)
                 .status(UserStatus.ACTIVE)
                 .homeLat(13.0500)
                 .homeLng(80.2824)
                 .fcmToken("fcm_token_arun_101")
                 .build();
 
-        // User 2: Tambaram (~25.2 km) - WITHIN 30 KM
+        // User 2: Guindy / Airport (~14.5 km) - WITHIN 25 KM
         nearbyUser2 = User.builder()
                 .id(102L)
                 .name("Priya Sharma")
                 .phone("9876543211")
-                .role(Role.CITIZEN)
+                .role(Role.USER)
                 .status(UserStatus.ACTIVE)
-                .homeLat(12.9249)
-                .homeLng(80.1000)
+                .homeLat(12.9800)
+                .homeLng(80.1800)
                 .fcmToken("fcm_token_priya_102")
                 .build();
 
-        // User 3: In the corner of the bounding box (~34 km) - OUTSIDE 30 KM
+        // User 3: Tambaram (~25.2 km) - OUTSIDE 25 KM
         edgeOutsideUser = User.builder()
                 .id(103L)
                 .name("Far Citizen")
                 .phone("9876543212")
-                .role(Role.CITIZEN)
+                .role(Role.USER)
                 .status(UserStatus.ACTIVE)
-                .homeLat(12.8500)
-                .homeLng(80.0500)
+                .homeLat(12.9249)
+                .homeLng(80.1000)
                 .fcmToken("fcm_token_far_103")
                 .build();
     }
 
     @Test
-    @DisplayName("Should fetch users via bounding box, filter <= 30km using Haversine, geocode once, and send FCM")
+    @DisplayName("Should fetch users via bounding box, filter <= 25km using Haversine, geocode once, and send FCM")
     void testProcessDisasterNotification_Success() {
         double disasterLat = 13.0827;
         double disasterLng = 80.2707;
@@ -119,9 +122,9 @@ class DisasterNotificationServiceTest {
             return list.size();
         });
 
-        // Execute notification pipeline
+        // Execute notification pipeline with default 25.0 km radius
         DisasterNotificationResult result = notificationService.processDisasterNotification(
-                disasterId, disasterLat, disasterLng, type, "Severe Flood Alert", 30.0);
+                disasterId, disasterLat, disasterLng, type, "Severe Flood Alert", 25.0);
 
         // Assertions
         assertNotNull(result);
@@ -130,9 +133,10 @@ class DisasterNotificationServiceTest {
         assertEquals(address, result.getResolvedAddress());
         assertEquals(3, result.getCandidateUsersInBoundingBox());
 
-        // Exactly 2 users must be within 30 km (User 1 and User 2; User 3 was filtered out)
+        // Exactly 2 users must be within 25 km (User 1 and User 2; User 3 at 25.2 km was filtered out)
         assertEquals(2, result.getUsersWithinRadius());
         assertEquals(2, result.getNotificationsSent());
+        assertEquals(25.0, result.getRadiusKm());
 
         // Reverse Geocoding must be called ONCE for the entire disaster event
         verify(reverseGeocodingService, times(1)).getAddressFromCoordinates(disasterLat, disasterLng);
@@ -158,10 +162,51 @@ class DisasterNotificationServiceTest {
         FcmNotificationPayload payload2 = capturedPayloads.get(1);
         assertEquals("fcm_token_priya_102", payload2.getFcmToken());
         assertEquals("FLOOD", payload2.getDisasterType());
-        assertTrue(payload2.getDistanceKm() > 20.0 && payload2.getDistanceKm() <= 30.0);
+        assertTrue(payload2.getDistanceKm() > 10.0 && payload2.getDistanceKm() <= 25.0);
 
         // Verify In-App notifications saved
         verify(notificationRepository, times(2)).save(any(Notification.class));
+    }
+
+    @Test
+    @DisplayName("Should deduplicate identical FCM tokens across multiple user accounts within 25km")
+    void testProcessDisasterNotification_DeduplicatesTokens() {
+        User duplicateTokenUser = User.builder()
+                .id(104L)
+                .name("Arun Secondary")
+                .phone("9876543299")
+                .role(Role.VOLUNTEER)
+                .status(UserStatus.ACTIVE)
+                .homeLat(13.0600)
+                .homeLng(80.2750)
+                .fcmToken("fcm_token_arun_101") // Same token as nearbyUser1
+                .build();
+
+        when(userRepository.findUsersInBoundingBox(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(Arrays.asList(nearbyUser1, duplicateTokenUser));
+        when(reverseGeocodingService.getAddressFromCoordinates(anyDouble(), anyDouble()))
+                .thenReturn("Chennai Central");
+        when(fcmNotificationService.sendBatchParallel(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+
+        DisasterNotificationResult result = notificationService.processDisasterNotification(
+                77L, 13.0827, 80.2707, DisasterType.FIRE, "Industrial Fire", 25.0);
+
+        assertEquals(2, result.getCandidateUsersInBoundingBox());
+        // Only 1 unique token user should be retained and notified after deduplication
+        assertEquals(1, result.getUsersWithinRadius());
+        assertEquals(1, result.getNotificationsSent());
+    }
+
+    @Test
+    @DisplayName("Should safely abort notification dispatch when coordinates are invalid or out of range")
+    void testProcessDisasterNotification_InvalidCoordinates() {
+        DisasterNotificationResult result = notificationService.processDisasterNotification(
+                88L, 105.0, 200.0, DisasterType.FLOOD, "Invalid Coords", 25.0);
+
+        assertNotNull(result);
+        assertEquals(0, result.getUsersWithinRadius());
+        assertEquals(0, result.getNotificationsSent());
+        verifyNoInteractions(userRepository);
     }
 
     @Test
@@ -177,7 +222,7 @@ class DisasterNotificationServiceTest {
         when(fcmNotificationService.sendBatchParallel(Collections.emptyList())).thenReturn(0);
 
         DisasterNotificationResult result = notificationService.processDisasterNotification(
-                99L, disasterLat, disasterLng, DisasterType.EARTHQUAKE, "Minor Tremor", 30.0);
+                99L, disasterLat, disasterLng, DisasterType.EARTHQUAKE, "Minor Tremor", 25.0);
 
         assertEquals(0, result.getCandidateUsersInBoundingBox());
         assertEquals(0, result.getUsersWithinRadius());
@@ -195,7 +240,7 @@ class DisasterNotificationServiceTest {
         when(fcmNotificationService.sendBatchParallel(anyList())).thenReturn(1);
 
         DisasterNotificationResult result = notificationService.processDisasterNotification(
-                1L, 13.0827, 80.2707, DisasterType.FIRE, "Fire Alert", 30.0);
+                1L, 13.0827, 80.2707, DisasterType.FIRE, "Fire Alert", 25.0);
 
         assertTrue(result.getExecutionDurationMs() < 2000,
                 "Execution must take less than 2000ms SLA, took: " + result.getExecutionDurationMs() + "ms");

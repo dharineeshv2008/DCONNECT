@@ -214,17 +214,18 @@ public class LoginActivity extends AppCompatActivity {
                 .putString("token", userToken)
                 .apply();
 
-        Toast.makeText(this, "Welcome " + userName + "! Registering FCM token...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Welcome " + userName + "!", Toast.LENGTH_SHORT).show();
 
-        // Fetch REAL FCM token and send to backend
+        // Fetch REAL FCM token and send to backend asynchronously without blocking UI navigation
         final String finalUserId = userId;
+        final android.content.Context appContext = getApplicationContext();
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (task.isSuccessful() && task.getResult() != null) {
                 String fcmToken = task.getResult();
                 Log.d(TAG, "🔑 REAL FCM TOKEN GENERATED: " + fcmToken);
 
-                // Send to POST /api/save-device-token
-                ApiClient.sendDeviceTokenToBackend(getApplicationContext(), finalUserId, fcmToken, new ApiClient.ApiCallback() {
+                // Send to POST /api/save-device-token in background
+                ApiClient.sendDeviceTokenToBackend(appContext, finalUserId, fcmToken, new ApiClient.ApiCallback() {
                     @Override
                     public void onSuccess(String responseMessage) {
                         Log.i(TAG, "✅ Device token saved & welcome notification triggered!");
@@ -236,10 +237,10 @@ public class LoginActivity extends AppCompatActivity {
                     }
                 });
             }
-
-            // Launch Dashboard Activity
-            startActivity(new Intent(LoginActivity.this, DashboardActivity.class));
-            finish();
         });
+
+        // Launch Dashboard Activity immediately
+        startActivity(new Intent(LoginActivity.this, DashboardActivity.class));
+        finish();
     }
 }

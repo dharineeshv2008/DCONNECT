@@ -62,6 +62,9 @@ public class Disaster {
     @Builder.Default
     private Integer reportCount = 1;
 
+    @Column(name = "ml_severity", length = 50)
+    private String mlSeverity;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
     private User createdBy;

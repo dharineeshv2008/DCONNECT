@@ -276,7 +276,7 @@ describe('D-Connect PWA, Offline, Home Location & 30km Radius Alert Suite (50+ T
     expect(res.json.success).toBe(false);
   });
 
-  test('29. POST /api/notifications/check-nearby-alerts evaluates 30km radius', async () => {
+  test('29. POST /api/notifications/check-nearby-alerts evaluates 25km radius', async () => {
     const res = await makeRequest('/api/notifications/check-nearby-alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -284,7 +284,7 @@ describe('D-Connect PWA, Offline, Home Location & 30km Radius Alert Suite (50+ T
         disasterId: 1,
         latitude: 13.0827,
         longitude: 80.2707,
-        radiusKm: 30.0
+        radiusKm: 25.0
       }
     });
     expect(res.status).toBe(200);
@@ -292,18 +292,18 @@ describe('D-Connect PWA, Offline, Home Location & 30km Radius Alert Suite (50+ T
     expect(Array.isArray(res.json.notifiedUsers)).toBe(true);
   });
 
-  test('30. 30km radius alert notification calculation uses Haversine formula', async () => {
+  test('30. 25km radius alert notification calculation uses Haversine formula', async () => {
     const res = await makeRequest('/api/notifications/check-nearby-alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: {
         latitude: 13.0827,
         longitude: 80.2707,
-        radiusKm: 30.0
+        radiusKm: 25.0
       }
     });
     expect(res.status).toBe(200);
-    expect(res.json.radiusKm).toBe(30.0);
+    expect(res.json.radiusKm).toBe(25.0);
   });
 
   test('31. app.js initializes FCM token registration on session restore', () => {

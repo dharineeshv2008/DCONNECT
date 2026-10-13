@@ -37,7 +37,7 @@ public class ApiClient {
             .build();
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4);
     public static final Gson GSON = new Gson();
 
     public interface ApiCallback {
@@ -49,6 +49,22 @@ public class ApiClient {
      * Registers FCM device token with backend: POST /api/save-device-token
      */
     public static void sendDeviceTokenToBackend(Context context, String userId, String fcmToken, ApiCallback callback) {
+        Double lat = null;
+        Double lng = null;
+        if (context != null) {
+            SharedPreferences prefs = context.getSharedPreferences("dconnect_prefs", Context.MODE_PRIVATE);
+            if (prefs.contains("user_lat") && prefs.contains("user_lng")) {
+                lat = (double) prefs.getFloat("user_lat", 0f);
+                lng = (double) prefs.getFloat("user_lng", 0f);
+            }
+        }
+        sendDeviceTokenToBackend(context, userId, fcmToken, lat, lng, callback);
+    }
+
+    /**
+     * Registers FCM device token and optional coordinates with backend: POST /api/save-device-token
+     */
+    public static void sendDeviceTokenToBackend(Context context, String userId, String fcmToken, Double latitude, Double longitude, ApiCallback callback) {
         EXECUTOR.submit(() -> {
             int maxRetries = 3;
             int attempt = 0;
@@ -59,9 +75,14 @@ public class ApiClient {
                 try {
                     Map<String, Object> payload = new HashMap<>();
                     payload.put("user_id", userId != null ? userId : "");
+                    payload.put("token", fcmToken);
                     payload.put("fcm_token", fcmToken);
                     payload.put("device", "android");
                     payload.put("device_type", "android");
+                    if (latitude != null && longitude != null && (latitude != 0.0 || longitude != 0.0)) {
+                        payload.put("latitude", latitude);
+                        payload.put("longitude", longitude);
+                    }
 
                     String jsonBody = GSON.toJson(payload);
                     Log.d(TAG, "📤 [Attempt " + attempt + "] POST /api/save-device-token Payload: " + jsonBody);
@@ -89,18 +110,21 @@ public class ApiClient {
                             return;
                         } else {
                             Log.w(TAG, "⚠️ Backend HTTP " + response.code() + ": " + responseText);
+                            if (response.code() >= 400 && response.code() < 500) {
+                                break; // Do not retry client 4xx errors
+                            }
                         }
                     }
                 } catch (IOException e) {
                     Log.w(TAG, "🔁 Network error on attempt " + attempt + ": " + e.getMessage());
                     if (attempt < maxRetries) {
-                        try { Thread.sleep(2000L * attempt); } catch (InterruptedException ignored) {}
+                        try { Thread.sleep(1000L * attempt); } catch (InterruptedException ignored) {}
                     }
                 }
             }
 
             if (!success && callback != null) {
-                callback.onError("Failed to register FCM token with backend after " + maxRetries + " retries.");
+                callback.onError("Failed to register FCM token with backend.");
             }
         });
     }

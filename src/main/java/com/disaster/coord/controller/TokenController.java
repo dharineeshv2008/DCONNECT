@@ -4,6 +4,7 @@ import com.disaster.coord.dto.ApiResponse;
 import com.disaster.coord.dto.SaveTokenRequest;
 import com.disaster.coord.entity.User;
 import com.disaster.coord.repository.UserRepository;
+import com.disaster.coord.service.FcmNotificationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +26,9 @@ public class TokenController {
     private static final Logger log = LoggerFactory.getLogger(TokenController.class);
     private final UserRepository userRepository;
     private final FcmNotificationService fcmNotificationService;
+    private final com.disaster.coord.service.FirebasePushSender firebasePushSender;
 
-    @PostMapping("/save-token")
+    @PostMapping({"/save-token", "/save-device-token", "/users/device-token"})
     public ResponseEntity<ApiResponse<Map<String, Object>>> saveToken(@RequestBody SaveTokenRequest request) {
         log.info("Received save-token request: userId={}, lat={}, lng={}, fcmToken={}...",
                 request.getUserId(), request.getLatitude(), request.getLongitude(),
@@ -67,20 +69,24 @@ public class TokenController {
         }
 
         if (uid != null) {
+            final Long finalUid = uid;
             final Double finalLat = lat;
             final Double finalLng = lng;
-            userRepository.findById(uid).ifPresent(user -> {
+            userRepository.findById(finalUid).ifPresent(user -> {
                 user.setFcmToken(request.getFcmToken());
                 if (finalLat != null) user.setHomeLat(finalLat);
                 if (finalLng != null) user.setHomeLng(finalLng);
                 userRepository.save(user);
-                log.info("Updated User #{} FCM token and home location: ({}, {})", uid, finalLat, finalLng);
+                log.info("Updated User #{} FCM token and home location: ({}, {})", finalUid, finalLat, finalLng);
             });
         }
 
         // Trigger immediate test push notification ("Hi - Notifications working")
         boolean testPushSent = false;
         try {
+            if (firebasePushSender != null) {
+                testPushSent = firebasePushSender.sendWelcomeNotification(request.getFcmToken());
+            }
             com.disaster.coord.dto.FcmNotificationPayload testPayload = com.disaster.coord.dto.FcmNotificationPayload.builder()
                     .fcmToken(request.getFcmToken())
                     .title("Hi - Notifications working")
@@ -90,7 +96,8 @@ public class TokenController {
                     .distanceKm(0.0)
                     .customData(Map.of("type", "WELCOME_TEST", "clickAction", "OPEN_DISASTER_ALERT"))
                     .build();
-            testPushSent = fcmNotificationService.sendNotification(testPayload);
+            boolean simResult = fcmNotificationService.sendNotification(testPayload);
+            if (!testPushSent) testPushSent = simResult;
         } catch (Exception ex) {
             log.warn("Failed to dispatch test FCM notification: {}", ex.getMessage());
         }

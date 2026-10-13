@@ -62,6 +62,7 @@ public class DisasterDtos {
         private String title;
         private String description;
         private Severity severity;
+        private String mlSeverity;
         private Double latitude;
         private Double longitude;
         private String locationName;

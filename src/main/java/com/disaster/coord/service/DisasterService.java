@@ -1,6 +1,8 @@
 package com.disaster.coord.service;
 
 import com.disaster.coord.dto.DisasterDtos.*;
+import com.disaster.coord.dto.PredictionDtos.*;
+import com.disaster.coord.enums.Severity;
 import com.disaster.coord.entity.Disaster;
 import com.disaster.coord.entity.DisasterReport;
 import com.disaster.coord.entity.User;
@@ -44,6 +46,7 @@ public class DisasterService {
     private final NotificationService notificationService;
     private final RateLimiterService rateLimiterService;
     private final ApplicationEventPublisher eventPublisher;
+    private final IncidentPredictionService predictionService;
 
     @Value("${disaster-app.merge.max-distance-km:10.0}")
     private double maxMergeDistanceKm;
@@ -169,11 +172,41 @@ public class DisasterService {
                 initialStatus = DisasterStatus.VERIFIED_ACTIVE;
             }
 
+            // External ML severity assessment via Hugging Face Router
+            PredictionResponse prediction = null;
+            try {
+                prediction = predictionService.predict(PredictionRequest.builder()
+                        .type(req.getType())
+                        .title(req.getTitle())
+                        .description(req.getDescription())
+                        .build());
+            } catch (Exception ex) {
+                log.warn("Incident prediction advisory notice: {}", ex.getMessage());
+            }
+
+            String mlSeverity = (prediction != null && prediction.getSeverity() != null)
+                    ? prediction.getSeverity() : Severity.MEDIUM.name();
+
+            // Human reporter severity takes precedence if explicitly provided; otherwise use validated ML severity
+            Severity assignedSeverity;
+            if (req.getSeverity() != null) {
+                assignedSeverity = req.getSeverity();
+            } else if (prediction != null && "SUCCESS".equals(prediction.getStatus())) {
+                try {
+                    assignedSeverity = Severity.valueOf(prediction.getSeverity());
+                } catch (Exception e) {
+                    assignedSeverity = Severity.MEDIUM;
+                }
+            } else {
+                assignedSeverity = Severity.MEDIUM;
+            }
+
             Disaster newDisaster = Disaster.builder()
                     .type(req.getType())
                     .title(req.getTitle())
                     .description(req.getDescription())
-                    .severity(req.getSeverity() != null ? req.getSeverity() : com.disaster.coord.enums.Severity.MEDIUM)
+                    .severity(assignedSeverity)
+                    .mlSeverity(mlSeverity)
                     .latitude(req.getLatitude())
                     .longitude(req.getLongitude())
                     .locationName(req.getLocationName() != null ? req.getLocationName() : String.format("Coordinates: %.4f, %.4f", req.getLatitude(), req.getLongitude()))
@@ -184,6 +217,10 @@ public class DisasterService {
                     .build();
 
             targetDisaster = disasterRepository.save(newDisaster);
+
+            if (prediction != null && targetDisaster.getId() != null) {
+                predictionService.saveAuditTrail(targetDisaster.getId(), prediction, req.getDescription());
+            }
 
             // Audit record in reports table
             DisasterReport firstReport = DisasterReport.builder()
@@ -201,20 +238,18 @@ public class DisasterService {
                     "New disaster published directly to active response pipeline." :
                     "Citizen disaster report logged. Pending Admin verification before public broadcast.";
 
-            log.info("NEW DISASTER CREATED: ID {} with initial status {}", targetDisaster.getId(), initialStatus);
-
-            // Publish domain event for real-time proximity FCM notifications (< 30km radius)
-            eventPublisher.publishEvent(new DisasterCreatedEvent(
-                    this,
-                    targetDisaster.getId(),
-                    targetDisaster.getLatitude(),
-                    targetDisaster.getLongitude(),
-                    targetDisaster.getType(),
-                    targetDisaster.getTitle(),
-                    targetDisaster.getLocationName()
-            ));
-
             if (initialStatus == DisasterStatus.VERIFIED_ACTIVE) {
+                // Publish domain event for real-time proximity FCM notifications (< 25km radius) for verified incidents
+                eventPublisher.publishEvent(new DisasterCreatedEvent(
+                        this,
+                        targetDisaster.getId(),
+                        targetDisaster.getLatitude(),
+                        targetDisaster.getLongitude(),
+                        targetDisaster.getType(),
+                        targetDisaster.getTitle(),
+                        targetDisaster.getLocationName()
+                ));
+
                 notificationService.notifyAllVolunteers(
                         "New Disaster Verified",
                         String.format("URGENT: %s incident '%s' published. Mobilization underway.",
@@ -347,6 +382,7 @@ public class DisasterService {
                 .title(d.getTitle())
                 .description(d.getDescription())
                 .severity(d.getSeverity())
+                .mlSeverity(d.getMlSeverity())
                 .latitude(d.getLatitude())
                 .longitude(d.getLongitude())
                 .locationName(d.getLocationName())

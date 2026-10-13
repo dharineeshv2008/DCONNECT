@@ -40,15 +40,16 @@ public class DisasterNotificationService {
 
     private static final Logger log = LoggerFactory.getLogger(DisasterNotificationService.class);
 
-    public static final double DEFAULT_NOTIFICATION_RADIUS_KM = 30.0;
+    public static final double DEFAULT_NOTIFICATION_RADIUS_KM = 25.0;
 
     private final UserRepository userRepository;
     private final DisasterRepository disasterRepository;
     private final NotificationRepository notificationRepository;
     private final ReverseGeocodingService reverseGeocodingService;
     private final FcmNotificationService fcmNotificationService;
+    private final FirebasePushSender firebasePushSender;
 
-    @Value("${disaster-app.notifications.default-radius-km:30.0}")
+    @Value("${disaster-app.notifications.default-radius-km:25.0}")
     private double configuredRadiusKm;
 
     /**
@@ -68,6 +69,24 @@ public class DisasterNotificationService {
 
         log.info("Starting real-time disaster notification. DisasterId: {}, Type: {}, Coords: ({}, {}), Radius: {} km",
                 disasterId, disasterType, latitude, longitude, radius);
+
+        // Validation: Verify latitude and longitude are valid and within legal ranges
+        if (latitude == null || longitude == null || latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            log.error("Invalid disaster coordinates for notification: lat={}, lng={}", latitude, longitude);
+            return DisasterNotificationResult.builder()
+                    .disasterId(disasterId)
+                    .disasterType(disasterType != null ? disasterType.name() : null)
+                    .latitude(latitude)
+                    .longitude(longitude)
+                    .resolvedAddress("Invalid coordinates")
+                    .candidateUsersInBoundingBox(0)
+                    .usersWithinRadius(0)
+                    .notificationsSent(0)
+                    .radiusKm(radius)
+                    .executionDurationMs(System.currentTimeMillis() - startTime)
+                    .recipients(Collections.emptyList())
+                    .build();
+        }
 
         // STEP 1: Compute spatial bounding box to avoid full table scan
         GeoLocationUtil.BoundingBox bbox = GeoLocationUtil.calculateBoundingBox(latitude, longitude, radius);
@@ -91,8 +110,10 @@ public class DisasterNotificationService {
             }
         }
 
-        // STEP 4: Apply exact Haversine formula and filter users strictly within radius (<= 30.0 km)
+        // STEP 4: Apply exact Haversine formula and filter users strictly within radius (<= 25.0 km)
         List<NearbyUserCandidate> nearbyUsers = new ArrayList<>();
+        Set<String> seenTokens = new HashSet<>();
+
         for (User user : candidates) {
             if (user.getHomeLat() == null || user.getHomeLng() == null) {
                 continue;
@@ -102,10 +123,15 @@ public class DisasterNotificationService {
                     latitude, longitude, user.getHomeLat(), user.getHomeLng());
 
             if (distanceKm <= radius) {
-                nearbyUsers.add(new NearbyUserCandidate(user, distanceKm));
+                String token = user.getFcmToken();
+                if (token != null && !token.isBlank()) {
+                    if (seenTokens.add(token)) {
+                        nearbyUsers.add(new NearbyUserCandidate(user, distanceKm));
+                    }
+                }
             }
         }
-        log.info("Filtered down to {} users strictly within {} km radius using Haversine formula",
+        log.info("Filtered down to {} unique token users strictly within {} km radius using Haversine formula",
                 nearbyUsers.size(), radius);
 
         // STEP 5: Prepare FCM payloads with Disaster Type, Address, and Personalized Distance
@@ -162,7 +188,27 @@ public class DisasterNotificationService {
                     .build());
         }
 
-        // STEP 6: High-throughput parallel FCM dispatch
+        // STEP 6: Real Firebase Admin SDK push dispatch
+        if (firebasePushSender != null) {
+            for (FcmNotificationPayload payload : fcmPayloads) {
+                try {
+                    firebasePushSender.sendDisasterAlert(
+                            payload.getFcmToken(),
+                            payload.getTitle(),
+                            payload.getBody(),
+                            payload.getDisasterId() != null ? String.valueOf(payload.getDisasterId()) : "",
+                            payload.getDisasterType(),
+                            payload.getAddress(),
+                            payload.getDistanceKm()
+                    );
+                } catch (Exception ex) {
+                    log.warn("Notice: Real FCM push attempt via Admin SDK for token {}: {}",
+                            maskToken(payload.getFcmToken()), ex.getMessage());
+                }
+            }
+        }
+
+        // Parallel dispatch & test audit logging
         int dispatchedCount = fcmNotificationService.sendBatchParallel(fcmPayloads);
         long elapsedMs = System.currentTimeMillis() - startTime;
 

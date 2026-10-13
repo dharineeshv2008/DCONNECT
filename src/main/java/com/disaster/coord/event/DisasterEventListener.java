@@ -31,7 +31,7 @@ public class DisasterEventListener {
                 event.getLongitude(),
                 event.getDisasterType(),
                 event.getTitle(),
-                null // uses default 30 km radius
+                25.0 // uses default 25 km radius
         );
     }
 }

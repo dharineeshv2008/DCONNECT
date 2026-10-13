@@ -551,7 +551,7 @@ async function processTelegramUpdate(body) {
           longitude: updatedRecord.longitude,
           severity: updatedRecord.severity,
           title: updatedRecord.title,
-          radiusKm: 30
+          radiusKm: 25.0
         }).catch(err => console.warn('Radius alert auto-dispatch notice:', err.message));
       }
 

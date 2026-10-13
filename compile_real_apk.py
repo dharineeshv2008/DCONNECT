@@ -20,10 +20,13 @@ d8_jar = os.path.join(sdk_dir, "build-tools", "33.0.2", "lib", "d8.jar")
 zipalign = os.path.join(sdk_dir, "build-tools", "33.0.2", "zipalign.exe")
 apksigner_jar = os.path.join(sdk_dir, "build-tools", "33.0.2", "lib", "apksigner.jar")
 android_jar = os.path.join(sdk_dir, "platforms", "android-33", "android.jar")
-javac = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot\bin\javac.exe"
-java_exe = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot\bin\java.exe"
-keytool = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot\bin\keytool.exe"
-jarsigner = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot\bin\jarsigner.exe"
+jdk_bin = os.path.join(os.environ.get("JAVA_HOME", ""), "bin")
+if not os.path.exists(os.path.join(jdk_bin, "javac.exe")):
+    jdk_bin = r"C:\Users\dhari\.jdks\jbr-21.0.11\bin"
+javac = os.path.join(jdk_bin, "javac.exe")
+java_exe = os.path.join(jdk_bin, "java.exe")
+keytool = os.path.join(jdk_bin, "keytool.exe")
+jarsigner = os.path.join(jdk_bin, "jarsigner.exe")
 
 # Use temp directory without unicode / emoji characters for AAPT2 and javac compatibility
 build_dir = os.path.join(tempfile.gettempdir(), "dconnect_apk_build")
@@ -235,38 +238,8 @@ public class MainActivity extends Activity {
         }
 
         mWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        mWebView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onGeolocationPermissionsShowPrompt(String origin, android.webkit.GeolocationPermissions.Callback callback) {
-                callback.invoke(origin, true, false);
-            }
-
-            @Override
-            public void onPermissionRequest(final android.webkit.PermissionRequest request) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            request.grant(request.getResources());
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            }
-        });
-        mWebView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                view.loadUrl(url);
-                return true;
-            }
-
-            @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.proceed();
-            }
-        });
+        mWebView.setWebChromeClient(new DConnectChromeClient());
+        mWebView.setWebViewClient(new DConnectWebViewClient());
 
         mWebView.addJavascriptInterface(new WebAppInterface(this), "AndroidFCM");
 
@@ -277,7 +250,36 @@ public class MainActivity extends Activity {
         }
     }
 
-    public class WebAppInterface {
+    public static class DConnectChromeClient extends WebChromeClient {
+        @Override
+        public void onGeolocationPermissionsShowPrompt(String origin, android.webkit.GeolocationPermissions.Callback callback) {
+            callback.invoke(origin, true, false);
+        }
+
+        @Override
+        public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+            try {
+                request.grant(request.getResources());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static class DConnectWebViewClient extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            view.loadUrl(url);
+            return true;
+        }
+
+        @Override
+        public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            handler.proceed();
+        }
+    }
+
+    public static class WebAppInterface {
         Context mContext;
 
         WebAppInterface(Context c) {
@@ -301,95 +303,6 @@ public class MainActivity extends Activity {
         public boolean isAndroidApp() {
             return true;
         }
-
-        @android.webkit.JavascriptInterface
-        public void showDeviceTokenDialog() {
-            MainActivity.this.showDeviceTokenDialog();
-        }
-    }
-
-    public void showDeviceTokenDialog() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String token = null;
-                    try {
-                        String androidId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
-                        if (androidId == null || androidId.isEmpty()) {
-                            androidId = java.util.UUID.randomUUID().toString().replace("-", "");
-                        }
-                        token = "d6vkI7HqSXzPrSLJZnfvJY:APA91b" + androidId + "eGqHFmB3rWpkjeH9lrVDLVtyP3SN8fTlY5FOmvI71J2EgwyR_o600Z1cr7AwM2HI8PICixzU4boWTqe13dwq9C3Ap0ajw6r_a4_" + androidId;
-                    } catch (Exception e) {
-                        token = null;
-                    }
-
-                    if (token == null || token.isEmpty()) {
-                        android.widget.Toast.makeText(MainActivity.this, "Error: FCM Device token is null.", android.widget.Toast.LENGTH_LONG).show();
-                        return;
-                    }
-
-                    android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(MainActivity.this);
-                    builder.setTitle("Device Token");
-
-                    android.widget.LinearLayout layout = new android.widget.LinearLayout(MainActivity.this);
-                    layout.setOrientation(android.widget.LinearLayout.VERTICAL);
-                    layout.setPadding(40, 20, 40, 20);
-
-                    final android.widget.EditText tokenInput = new android.widget.EditText(MainActivity.this);
-                    tokenInput.setText(token);
-                    tokenInput.setTextIsSelectable(true);
-                    tokenInput.setFocusable(true);
-                    tokenInput.setPadding(20, 20, 20, 20);
-                    tokenInput.setBackgroundColor(0xFF1E293B);
-                    tokenInput.setTextColor(0xFF38BDF8);
-                    tokenInput.setTextSize(12);
-                    tokenInput.setMaxLines(6);
-
-                    layout.addView(tokenInput);
-                    builder.setView(layout);
-
-                    final String finalToken = token;
-                    builder.setPositiveButton("Copy Token", new android.content.DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(android.content.DialogInterface dialog, int which) {
-                            android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                            android.content.ClipData clip = android.content.ClipData.newPlainText("FCM Token", finalToken);
-                            if (clipboard != null) {
-                                clipboard.setPrimaryClip(clip);
-                                android.widget.Toast.makeText(MainActivity.this, "Copied!", android.widget.Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    });
-
-                    builder.setNegativeButton("Close", new android.content.DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(android.content.DialogInterface dialog, int which) {
-                            dialog.dismiss();
-                        }
-                    });
-
-                    builder.create().show();
-                } catch (Exception ex) {
-                    android.widget.Toast.makeText(MainActivity.this, "Error: " + ex.getMessage(), android.widget.Toast.LENGTH_LONG).show();
-                }
-            }
-        });
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        menu.add(0, 1001, 0, "📱 Get My Device Token");
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(android.view.MenuItem item) {
-        if (item.getItemId() == 1001) {
-            showDeviceTokenDialog();
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     private boolean isNetworkAvailable() {
@@ -449,6 +362,7 @@ bin_dir = os.path.join(build_dir, "bin")
 cmd_javac = [
     javac,
     "-J-Xmx256m",
+    "-g:none",
     "-source", "8",
     "-target", "8",
     "-cp", android_jar_temp,
@@ -540,17 +454,16 @@ if res.returncode != 0:
     ]
     subprocess.run(cmd_jarsigner, capture_output=True)
 
-# STEP H: Copy app-release.apk to /public/downloads/app.apk, dconnect.apk, and app-release.apk
+# STEP H: Copy app-release.apk to /public/downloads/ and /src/main/resources/static/downloads/
 pub_downloads = os.path.join(ROOT_DIR, "public", "downloads")
+static_downloads = os.path.join(ROOT_DIR, "src", "main", "resources", "static", "downloads")
 os.makedirs(pub_downloads, exist_ok=True)
+os.makedirs(static_downloads, exist_ok=True)
 
 target_app_apk = os.path.join(pub_downloads, "app.apk")
-target_dconnect_apk = os.path.join(pub_downloads, "dconnect.apk")
-target_release_apk = os.path.join(pub_downloads, "app-release.apk")
-
-shutil.copy(release_apk, target_app_apk)
-shutil.copy(release_apk, target_dconnect_apk)
-shutil.copy(release_apk, target_release_apk)
+for folder in [pub_downloads, static_downloads]:
+    for filename in ["app.apk", "dconnect.apk", "app-release.apk", "dconnect-release.apk", "dconnect-debug.apk"]:
+        shutil.copy(release_apk, os.path.join(folder, filename))
 
 size_mb = os.path.getsize(target_app_apk) / (1024 * 1024)
 print(f"REAL COMPILED PRODUCTION RELEASE APK BUILT SUCCESSFULLY!")

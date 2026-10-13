@@ -20,21 +20,6 @@ module.exports = {
       time: true
     },
     {
-      name: 'dconnect-ml-service',
-      script: 'api_service.py',
-      interpreter: 'python',
-      instances: 1,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M',
-      env: {
-        PORT: 8000
-      },
-      error_file: './logs/ml-err.log',
-      out_file: './logs/ml-out.log',
-      time: true
-    },
-    {
       name: 'dconnect-health-watchdog',
       script: './health_monitor.js',
       instances: 1,

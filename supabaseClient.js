@@ -197,7 +197,7 @@ const supabaseDb = {
     return { success: true, token: cleanToken, fcm_token: cleanToken, deviceType, user_id: userId };
   },
 
-  async getUsersInRadius(disasterLat, disasterLng, radiusKm = 30.0) {
+  async getUsersInRadius(disasterLat, disasterLng, radiusKm = 25.0) {
     const { data: users, error } = await supabase.from('users').select('*');
     if (error) throw error;
     const dLat1 = parseFloat(disasterLat);

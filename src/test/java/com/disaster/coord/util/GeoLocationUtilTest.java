@@ -63,9 +63,9 @@ class GeoLocationUtilTest {
     }
 
     @Test
-    @DisplayName("Bounding box for 30 km radius must enclose all points within 30 km")
+    @DisplayName("Bounding box for 25 km radius must enclose all points within 25 km")
     void testCalculateBoundingBox_EnclosesRadius() {
-        double radiusKm = 30.0;
+        double radiusKm = 25.0;
         GeoLocationUtil.BoundingBox bbox = GeoLocationUtil.calculateBoundingBox(
                 CHENNAI_CENTRAL_LAT, CHENNAI_CENTRAL_LNG, radiusKm);
 
@@ -75,16 +75,51 @@ class GeoLocationUtilTest {
         assertTrue(bbox.getMinLon() < CHENNAI_CENTRAL_LNG);
         assertTrue(bbox.getMaxLon() > CHENNAI_CENTRAL_LNG);
 
-        // Point within 30km (Tambaram, ~25km) must fall inside bounding box
-        assertTrue(TAMBARAM_LAT >= bbox.getMinLat() && TAMBARAM_LAT <= bbox.getMaxLat(),
-                "Tambaram latitude must fall within bounding box");
-        assertTrue(TAMBARAM_LNG >= bbox.getMinLon() && TAMBARAM_LNG <= bbox.getMaxLon(),
-                "Tambaram longitude must fall within bounding box");
+        // Point within 25km (Marina Beach, ~3.8km) must fall inside bounding box
+        assertTrue(MARINA_BEACH_LAT >= bbox.getMinLat() && MARINA_BEACH_LAT <= bbox.getMaxLat(),
+                "Marina Beach latitude must fall within 25km bounding box");
+        assertTrue(MARINA_BEACH_LNG >= bbox.getMinLon() && MARINA_BEACH_LNG <= bbox.getMaxLon(),
+                "Marina Beach longitude must fall within 25km bounding box");
 
-        // Point outside 30km (Kanchipuram, ~68km) must fall outside bounding box
+        // Point outside 25km (Kanchipuram, ~68km) must fall outside bounding box
         boolean kanchiInside = (KANCHIPURAM_LAT >= bbox.getMinLat() && KANCHIPURAM_LAT <= bbox.getMaxLat())
                 && (KANCHIPURAM_LNG >= bbox.getMinLon() && KANCHIPURAM_LNG <= bbox.getMaxLon());
-        assertFalse(kanchiInside, "Kanchipuram (~68km) must not fall inside 30km bounding box");
+        assertFalse(kanchiInside, "Kanchipuram (~68km) must not fall inside 25km bounding box");
+    }
+
+    @Test
+    @DisplayName("Should strictly classify 25.0 km radius boundary conditions (0km, 5km, 24.9km, 25.0km, 25.1km, 50km)")
+    void testStrict25KmRadiusBoundaries() {
+        double originLat = 13.0827;
+        double originLng = 80.2707;
+        double degPerKmLat = 1.0 / 111.195;
+
+        // 0 km
+        double d0 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat, originLng);
+        assertEquals(0.0, d0, 0.001);
+        assertTrue(d0 <= 25.0, "0 km must be inside 25 km radius");
+
+        // ~5.0 km
+        double d5 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat + 5.0 * degPerKmLat, originLng);
+        assertEquals(5.0, d5, 0.05);
+        assertTrue(d5 <= 25.0, "5 km must be inside 25 km radius");
+
+        // ~24.9 km (inside)
+        double d24_9 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat + 24.9 * degPerKmLat, originLng);
+        assertTrue(d24_9 < 25.0 && d24_9 > 24.8, "24.9 km must be strictly inside 25 km radius, was: " + d24_9);
+        assertTrue(d24_9 <= 25.0);
+
+        // ~25.0 km (exact boundary)
+        double d25_0 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat + 24.999 * degPerKmLat, originLng);
+        assertTrue(d25_0 <= 25.0, "25.0 km boundary must be included (<= 25.0 km)");
+
+        // ~25.1 km (outside)
+        double d25_1 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat + 25.1 * degPerKmLat, originLng);
+        assertTrue(d25_1 > 25.0, "25.1 km must be excluded (> 25.0 km), was: " + d25_1);
+
+        // ~50.0 km (outside)
+        double d50 = GeoLocationUtil.calculateDistanceKm(originLat, originLng, originLat + 50.0 * degPerKmLat, originLng);
+        assertTrue(d50 > 25.0, "50 km must be excluded (> 25.0 km), was: " + d50);
     }
 
     @Test
@@ -92,6 +127,6 @@ class GeoLocationUtilTest {
     void testFormatDistance() {
         assertEquals("450 m", GeoLocationUtil.formatDistance(0.450));
         assertEquals("1.20 km", GeoLocationUtil.formatDistance(1.20));
-        assertEquals("25.80 km", GeoLocationUtil.formatDistance(25.804));
+        assertEquals("25.00 km", GeoLocationUtil.formatDistance(25.000));
     }
 }
