@@ -910,7 +910,7 @@
         <button class="btn btn-outline btn-sm" onclick="closeModal('taskAssignModal')">✕</button>
       </div>
 
-      <form onsubmit="handleAssignTaskSubmit(event)">
+      <form id="assignTaskForm" onsubmit="handleAssignTaskSubmit(event)">
         <input type="hidden" id="assignDisasterId">
         <div class="form-group">
           <label>Select Volunteer *</label>
@@ -924,7 +924,7 @@
           <label>Task Instructions & Priority *</label>
           <textarea id="assignTaskDesc" rows="3" class="form-control" placeholder="Specific coordinates, safety precautions, contact persons..." required></textarea>
         </div>
-                <button type="submit" class="btn btn-primary btn-block">Confirm Assignment</button>
+        <button type="submit" id="assignTaskSubmitBtn" class="btn btn-primary btn-block">Confirm Assignment</button>
       </form>
     </div>
   </div>

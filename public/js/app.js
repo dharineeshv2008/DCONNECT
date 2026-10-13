@@ -1384,28 +1384,67 @@ async function openAssignTaskModal(disasterId) {
   openModal('taskAssignModal');
 
   try {
-    const data = await fetchAPI('/volunteers/available');
-    const volunteers = data.data || [];
+    let volunteers = [];
+    try {
+      const data = await fetchAPI('/volunteers/available');
+      volunteers = data.data || [];
+    } catch (primaryErr) {
+      try {
+        const fallbackData = await fetchAPI('/users/volunteers');
+        volunteers = fallbackData.data || [];
+      } catch (secondaryErr) {
+        if (supabaseClient) {
+          const { data: sbUsers, error: sbErr } = await supabaseClient
+            .from('users')
+            .select('id, name, phone, role, status')
+            .eq('role', 'VOLUNTEER')
+            .order('created_at', { ascending: false });
+          if (!sbErr && sbUsers) {
+            volunteers = sbUsers.map(u => ({
+              id: u.id,
+              userId: u.id,
+              name: u.name || 'Volunteer',
+              phone: u.phone || 'N/A',
+              skills: 'General Relief'
+            }));
+          } else {
+            throw secondaryErr;
+          }
+        } else {
+          throw secondaryErr;
+        }
+      }
+    }
+
     if (volunteers.length === 0) {
       select.innerHTML = '<option value="">No volunteers available right now</option>';
       return;
     }
-    select.innerHTML = volunteers.map(v => `
-      <option value="${v.userId}">${v.name} (${v.skills || 'General'}) - ${v.phone}</option>
-    `).join('');
+    select.innerHTML = volunteers.map(v => {
+      const volId = v.userId || v.id || v.user_id;
+      return `<option value="${volId}">${escapeHtml(v.name || 'Volunteer')} (${escapeHtml(v.skills || 'General Relief')}) - ${escapeHtml(v.phone || 'N/A')}</option>`;
+    }).join('');
   } catch (err) {
+    console.error('Error loading volunteers for assignment:', err);
     select.innerHTML = '<option value="">Error loading volunteers</option>';
   }
 }
 
 async function handleAssignTaskSubmit(e) {
   e.preventDefault();
+  const volIdVal = parseInt(document.getElementById('assignVolunteerSelect').value);
+  if (isNaN(volIdVal)) {
+    showToast('Select Volunteer', 'Please select an available volunteer to assign this mission.', 'warning');
+    return;
+  }
+
   const payload = {
     disasterId: parseInt(document.getElementById('assignDisasterId').value),
-    volunteerId: parseInt(document.getElementById('assignVolunteerSelect').value),
+    volunteerId: volIdVal,
     taskTitle: document.getElementById('assignTaskTitle').value.trim(),
     taskDescription: document.getElementById('assignTaskDesc').value.trim(),
-    assignedById: currentUser ? currentUser.id : null
+    assignedById: currentUser ? currentUser.id : null,
+    userRole: currentUser ? currentUser.role : null
   };
 
   requestDoubleVerification(
@@ -1416,17 +1455,40 @@ async function handleAssignTaskSubmit(e) {
 }
 
 async function executeAssignTaskSubmit(payload) {
+  setButtonLoading('assignTaskSubmitBtn', true, 'Dispatching Mission...', 'Confirm Assignment');
   try {
-    await fetchAPI('/volunteers/assignments', {
-      method: 'POST',
-      body: payload
-    });
+    try {
+      await fetchAPI('/volunteers/assignments', {
+        method: 'POST',
+        body: payload
+      });
+    } catch (apiErr) {
+      if (supabaseClient && apiErr.status === 404) {
+        const { error: sbErr } = await supabaseClient
+          .from('assignments')
+          .insert([{
+            disaster_id: payload.disasterId,
+            volunteer_id: payload.volunteerId,
+            task_title: payload.taskTitle,
+            task_description: payload.taskDescription,
+            status: 'ASSIGNED',
+            assigned_by_user_id: payload.assignedById || null
+          }]);
+        if (sbErr) throw sbErr;
+      } else {
+        throw apiErr;
+      }
+    }
 
     showToast('Task Dispatched', 'Volunteer assigned to mission successfully!', 'success');
+    const form = document.getElementById('assignTaskForm');
+    if (form) form.reset();
     closeModal('taskAssignModal');
     loadVolunteerAssignments();
   } catch (err) {
     showToast('Dispatch Failed', err.message || 'Update failed. Try again.', 'error');
+  } finally {
+    setButtonLoading('assignTaskSubmitBtn', false, 'Dispatching Mission...', 'Confirm Assignment');
   }
 }
 

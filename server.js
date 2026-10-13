@@ -1468,8 +1468,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 9. Volunteers Directory (Tests 2, 58)
-    if (method === 'GET' && (pathname === '/api/users/volunteers' || pathname === '/api/volunteers')) {
+    // 9. Volunteers Directory & Available Volunteers (Tests 2, 58)
+    if (method === 'GET' && (pathname === '/api/users/volunteers' || pathname === '/api/volunteers' || pathname === '/api/volunteers/available')) {
       const volunteers = await supabaseDb.getVolunteersStrict();
       return sendJson(res, 200, { success: true, count: volunteers.length, data: volunteers });
     }
